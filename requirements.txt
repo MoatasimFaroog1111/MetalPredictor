@@ -1,2 +1,7 @@
-requests>=2.32,<3
-xlsxwriter>=3.2,<4
+pandas>=2.2
+requests>=2.32
+python-dateutil>=2.9
+matplotlib>=3.9
+statsmodels>=0.14
+pyarrow>=17.0
+databento>=0.62
