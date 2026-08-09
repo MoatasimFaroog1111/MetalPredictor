@@ -1,0 +1,35 @@
+name: CME Silver Futures Schema Probe
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe-cme-daily-volume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Probe archived CME daily volume workbook
+        run: PYTHONPATH=src python probe_cme_daily_volume.py > cme-daily-volume-schema.json
+
+      - name: Show probe result
+        run: cat cme-daily-volume-schema.json
+
+      - name: Upload probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cme-daily-volume-schema-probe
+          path: cme-daily-volume-schema.json
+          if-no-files-found: error
