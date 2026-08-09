@@ -9,11 +9,16 @@ import pandas as pd
 
 from metal_predictor.market_source import DownloadWindow
 from metal_predictor.publication_time import H15PublicationPolicy
+from metal_predictor.release_bundle import PublishedReleaseBundleResolver
 
 
 @dataclass(frozen=True)
 class TreasuryRatesReport:
-    rows: int
+    source_observations: int
+    public_state_rows: int
+    bundled_observations: int
+    multi_observation_releases: int
+    max_publication_bundle_size: int
     first_observation_date: str
     last_observation_date: str
     missing_2y: int
@@ -35,8 +40,13 @@ class TreasuryDailyParYieldCurveClient:
         "&page=&type=daily_treasury_yield_curve"
     )
 
-    def __init__(self, publication_policy: H15PublicationPolicy | None = None) -> None:
+    def __init__(
+        self,
+        publication_policy: H15PublicationPolicy | None = None,
+        bundle_resolver: PublishedReleaseBundleResolver | None = None,
+    ) -> None:
         self._publication = publication_policy or H15PublicationPolicy()
+        self._bundles = bundle_resolver or PublishedReleaseBundleResolver()
 
     def fetch(self, window: DownloadWindow) -> tuple[pd.DataFrame, TreasuryRatesReport]:
         start = pd.Timestamp(window.start_utc).tz_convert("UTC").date()
@@ -61,29 +71,37 @@ class TreasuryDailyParYieldCurveClient:
             raw[["rate_2y_percent", "rate_10y_percent"]].to_numpy(float)
         ).any(axis=1)
         raw = raw.loc[finite_any].reset_index(drop=True)
-        if raw["available_from_utc"].duplicated().any():
-            raise ValueError("Multiple Treasury observations map to the same H.15 publication timestamp.")
-        if not raw["available_from_utc"].is_monotonic_increasing:
-            raise ValueError("Treasury publication timestamps are not chronological.")
 
-        delayed = raw["observation_date"].dt.date.isin(
-            self._publication.delayed_observation_dates
-        ).sum()
+        delayed = int(
+            raw["observation_date"].dt.date.isin(
+                self._publication.delayed_observation_dates
+            ).sum()
+        )
+        source_observations = int(len(raw))
+        public_states, bundle_report = self._bundles.resolve(raw)
+        if not public_states["available_from_utc"].is_monotonic_increasing:
+            raise ValueError("Resolved Treasury publication timestamps are not chronological.")
+
         report = TreasuryRatesReport(
-            rows=int(len(raw)),
-            first_observation_date=str(raw["observation_date"].iloc[0].date()),
-            last_observation_date=str(raw["observation_date"].iloc[-1].date()),
-            missing_2y=int(raw["rate_2y_percent"].isna().sum()),
-            missing_10y=int(raw["rate_10y_percent"].isna().sum()),
-            delayed_h15_observations=int(delayed),
+            source_observations=source_observations,
+            public_state_rows=int(len(public_states)),
+            bundled_observations=bundle_report.bundled_observations,
+            multi_observation_releases=bundle_report.multi_observation_releases,
+            max_publication_bundle_size=bundle_report.max_bundle_size,
+            first_observation_date=str(public_states["observation_date"].iloc[0].date()),
+            last_observation_date=str(public_states["observation_date"].iloc[-1].date()),
+            missing_2y=int(public_states["rate_2y_percent"].isna().sum()),
+            missing_10y=int(public_states["rate_10y_percent"].isna().sum()),
+            delayed_h15_observations=delayed,
             source="U.S. Treasury Daily Treasury Par Yield Curve Rates",
             current_vintage_warning=(
                 "Historical values are the Treasury's current official historical values. "
-                "H.15 publication latency and documented 2023 omissions are modeled, but later "
-                "historical corrections, if any, may already be incorporated."
+                "H.15 publication latency and documented 2023 omissions are modeled, and "
+                "observations first disclosed together are collapsed to the latest actionable "
+                "public state; later historical corrections, if any, may already be incorporated."
             ),
         )
-        return raw, report
+        return public_states, report
 
     def _fetch_year(self, year: int) -> pd.DataFrame:
         url = self._URL.format(year=year)
