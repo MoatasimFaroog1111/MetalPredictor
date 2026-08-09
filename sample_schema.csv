@@ -1,5 +1,0 @@
-timestamp_utc,asset,source_symbol,market_type,source_provider,currency,price_unit,open_usd_per_kg,high_usd_per_kg,low_usd_per_kg,close_usd_per_kg,open_usd_per_oz,high_usd_per_oz,low_usd_per_oz,close_usd_per_oz,volume,quality_flags
-2021-08-08T12:00:00Z,XAU,XAU/USD,spot_aggregate,example_only,USD,USD/kg,,,,,,,,,,SCHEMA_EXAMPLE_NO_PRICE
-2021-08-08T12:00:00Z,XAG,XAG/USD,spot_aggregate,example_only,USD,USD/kg,,,,,,,,,,SCHEMA_EXAMPLE_NO_PRICE
-2021-08-08T12:00:00Z,XPT,XPT/USD,spot_aggregate,example_only,USD,USD/kg,,,,,,,,,,SCHEMA_EXAMPLE_NO_PRICE
-2021-08-08T12:00:00Z,XPD,XPD/USD,spot_aggregate,example_only,USD,USD/kg,,,,,,,,,,SCHEMA_EXAMPLE_NO_PRICE
