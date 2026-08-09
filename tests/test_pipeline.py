@@ -69,7 +69,7 @@ def test_leakage_guard_rejects_future_feature_name():
     f = NextHourTargetBuilder(C).build(sample_frame()).dropna(subset=["target_timestamp_utc"]).reset_index(drop=True)
     f["future_price"] = 1.0
     s = ChronologicalPurgedSplitter(C, SplitConfig()).split(f)
-    with pytest.raises(ValueError, match="future-looking"):
+    with pytest.raises(ValueError, match="forward-looking"):
         StrictLeakageGuard(C).validate(
             f,
             s,
@@ -124,6 +124,49 @@ def test_hour_features_require_exact_timestamp_lag():
     frame.loc[5:, C.timestamp] = frame.loc[5:, C.timestamp] + pd.Timedelta(hours=3)
     out = MomentumFeatures(C, FeatureConfig()).transform(frame)
     assert pd.isna(out.loc[5, "log_return_1h"])
+    assert out.loc[5, "has_exact_1h"] == 0
     expected_ts = out.loc[5, C.timestamp] - pd.Timedelta(hours=3)
     exists = bool((out[C.timestamp] == expected_ts).any())
     assert pd.isna(out.loc[5, "log_return_3h"]) is (not exists)
+    assert bool(out.loc[5, "has_exact_3h"]) is exists
+
+
+def test_pipeline_preserves_optional_missing_features(tmp_path):
+    from metal_predictor.core import PipelineConfig
+    source = sample_frame(1200)
+    source = source.drop(index=list(range(300, 360))).reset_index(drop=True)
+
+    class MemoryLoader:
+        def load(self, path):
+            return source.copy()
+
+    class MemoryWriter:
+        def __init__(self):
+            self.splits = None
+        def write(self, splits, feature_names, target_names, output_dir):
+            self.splits = splits
+
+    cfg = PipelineConfig(input_path=tmp_path / "unused.parquet", output_dir=tmp_path / "out")
+    writer = MemoryWriter()
+    pipeline = TrainingDataPipeline(
+        cfg,
+        MemoryLoader(),
+        SilverDatasetValidator(C),
+        (
+            PriceActionFeatures(C),
+            MomentumFeatures(C, cfg.features),
+            VolatilityFeatures(C, cfg.features),
+            TrendFeatures(C, cfg.features),
+            TemporalFeatures(C),
+            QualityFeatures(C),
+        ),
+        NextHourTargetBuilder(C),
+        ChronologicalPurgedSplitter(C, cfg.split),
+        StrictLeakageGuard(C),
+        writer,
+    )
+    report = pipeline.run()
+    combined = pd.concat(writer.splits.values(), ignore_index=True)
+    assert report["rows_with_optional_feature_missingness"] > 0
+    assert combined.filter(like="log_return_").isna().any().any()
+    assert combined["target_log_return_1h"].notna().all()
