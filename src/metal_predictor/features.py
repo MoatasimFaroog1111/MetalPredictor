@@ -41,11 +41,16 @@ class PriceActionFeatures:
 
 
 class MomentumFeatures:
+    """Exact-clock momentum; missing lags remain NaN and are explicitly flagged."""
+
     def __init__(self, columns: ColumnConfig, config: FeatureConfig) -> None:
         self._c, self._cfg = columns, config
-        names = [f"log_return_{lag}h" for lag in config.return_lags]
-        names += [f"momentum_{lag}h" for lag in config.return_lags if lag > 1]
-        names += [f"rsi_{config.rsi_window}h"]
+        names: list[str] = []
+        for lag in config.return_lags:
+            names.extend([f"has_exact_{lag}h", f"log_return_{lag}h"])
+            if lag > 1:
+                names.append(f"momentum_{lag}h")
+        names.append(f"rsi_{config.rsi_window}h")
         self._names = tuple(names)
 
     @property
@@ -61,6 +66,7 @@ class MomentumFeatures:
         for lag in self._cfg.return_lags:
             prior_log = _exact_lag(log_close, ts, lag)
             prior_close = _exact_lag(close, ts, lag)
+            out[f"has_exact_{lag}h"] = prior_close.notna().astype("int8")
             out[f"log_return_{lag}h"] = log_close - prior_log
             if lag > 1:
                 out[f"momentum_{lag}h"] = close / prior_close - 1.0
