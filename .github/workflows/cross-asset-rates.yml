@@ -34,7 +34,7 @@ jobs:
           python -m pip install -e .
 
       - name: Run component and leakage tests
-        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_rates.py
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_rates.py tests/test_release_bundle.py
 
       - name: Build silver baseline training data
         run: python build_training_dataset.py
