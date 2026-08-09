@@ -27,10 +27,22 @@ class H15PublicationPolicy:
         date(2023, 9, 12): date(2023, 9, 14),
     }
 
+    @property
+    def delayed_observation_dates(self) -> frozenset[date]:
+        return frozenset(self._TREASURY_DELAY_OVERRIDES)
+
+    @property
+    def exceptional_board_closures(self) -> frozenset[date]:
+        return self._BOARD_CLOSURES
+
     def available_from_utc(self, observation_dates: pd.Series) -> pd.Series:
         dates = pd.to_datetime(observation_dates, errors="raise").dt.date
         results = [self._one(day) for day in dates]
-        return pd.Series(pd.DatetimeIndex(results), index=observation_dates.index, dtype="datetime64[ns, UTC]")
+        return pd.Series(
+            pd.DatetimeIndex(results),
+            index=observation_dates.index,
+            dtype="datetime64[ns, UTC]",
+        )
 
     def _one(self, observation_date: date) -> pd.Timestamp:
         override = self._TREASURY_DELAY_OVERRIDES.get(observation_date)
