@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-from urllib.request import Request, urlopen
 
+from metal_predictor.cme_public_files import CmePublicFileClient
 from metal_predictor.ooxml_reader import XlsxWorkbookReader
 
 
 SAMPLE_DATE = "20250807"
-URL = f"https://www.cmegroup.com/ftp/daily_volume/daily_volume_{SAMPLE_DATE}.xlsx"
 TOKENS = ("SILVER", "COMEX", "METALS", "OPEN INTEREST", "VOLUME")
 
 
@@ -20,13 +19,12 @@ def normalize(value) -> str:
 
 
 def run() -> dict[str, object]:
-    request = Request(URL, headers={"User-Agent": "MetalPredictor research/1.0"})
-    with urlopen(request, timeout=60) as response:
-        payload = response.read()
-    workbook = XlsxWorkbookReader().read_bytes(payload)
+    fetched = CmePublicFileClient().fetch_daily_volume_workbook(SAMPLE_DATE)
+    workbook = XlsxWorkbookReader().read_bytes(fetched.content)
     report: dict[str, object] = {
-        "source_url": URL,
-        "bytes": len(payload),
+        "source_url": fetched.url,
+        "content_type": fetched.content_type,
+        "bytes": len(fetched.content),
         "sheet_count": len(workbook),
         "sheets": [],
     }
