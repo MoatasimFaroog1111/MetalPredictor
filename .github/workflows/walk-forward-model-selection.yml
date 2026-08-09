@@ -1,0 +1,46 @@
+name: Walk-Forward Model Selection
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+      - name: Run all tests
+        run: pytest
+      - name: Build leakage-safe training data
+        run: python build_training_dataset.py
+      - name: Run walk-forward selection and final holdout evaluation
+        run: python train_evaluate_models.py
+      - name: Show final model report
+        run: cat artifacts/model_evaluation/model_selection_report.json
+      - name: Upload model evaluation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-walk-forward-model-evaluation
+          path: artifacts/model_evaluation/
+          if-no-files-found: error
