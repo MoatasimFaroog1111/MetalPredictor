@@ -71,9 +71,14 @@ def _silver(rows: int = 500) -> pd.DataFrame:
 
 def _rates(days: int = 60) -> pd.DataFrame:
     business_day = CustomBusinessDay(calendar=USFederalHolidayCalendar())
-    observation = pd.date_range("2024-12-02", periods=days, freq=business_day)
     policy = H15PublicationPolicy()
+    generated = pd.date_range("2024-12-02", periods=days + 12, freq=business_day)
+    observation = pd.DatetimeIndex(
+        [ts for ts in generated if ts.date() not in policy.exceptional_board_closures]
+    )[:days]
+    assert len(observation) == days
     available = policy.available_from_utc(pd.Series(observation))
+    assert not available.duplicated().any()
     x = np.arange(days, dtype=float)
     return pd.DataFrame({
         "observation_date": observation,
