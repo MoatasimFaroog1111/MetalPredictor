@@ -64,10 +64,19 @@ class DevelopmentFeatureSetLoader:
 @dataclass(frozen=True)
 class FeatureSetComparisonConfig:
     output_dir: Path = Path("artifacts/cross_asset_gold")
+    base_set_id: str = "A"
+    enhanced_set_id: str = "B"
+    artifact_prefix: str = "gold_ab"
     bootstrap_block_rows: int = 24
     bootstrap_resamples: int = 5000
     strong_min_better_folds: int = 4
     promising_min_better_folds: int = 3
+
+    def __post_init__(self) -> None:
+        if not self.base_set_id or not self.enhanced_set_id or self.base_set_id == self.enhanced_set_id:
+            raise ValueError("Feature-set IDs must be non-empty and distinct.")
+        if not self.artifact_prefix or "/" in self.artifact_prefix or "\\" in self.artifact_prefix:
+            raise ValueError("artifact_prefix must be a simple file prefix.")
 
 
 @dataclass(frozen=True)
@@ -90,7 +99,7 @@ class FeatureSetFoldResult:
 
 
 class FeatureSetComparator:
-    """Paired A/B Walk-Forward comparison on development data only using one frozen estimator recipe."""
+    """Paired Walk-Forward comparison on development data only using one frozen estimator recipe."""
 
     def __init__(
         self,
@@ -182,12 +191,12 @@ class FeatureSetComparator:
                 "data_used": "original Train + Validation only",
                 "old_test_status": "historical benchmark; forbidden for feature selection",
                 "estimator": model_spec.name,
-                "estimator_hyperparameters_frozen_before_gold_comparison": True,
+                "estimator_hyperparameters_frozen_before_feature_set_comparison": True,
                 "paired_folds": True,
             },
             "feature_sets": {
-                "A": {"label": base.label, "feature_count": len(base.feature_names)},
-                "B": {"label": enhanced.label, "feature_count": len(enhanced.feature_names)},
+                self._config.base_set_id: {"label": base.label, "feature_count": len(base.feature_names)},
+                self._config.enhanced_set_id: {"label": enhanced.label, "feature_count": len(enhanced.feature_names)},
                 "new_feature_count": len(new_features),
                 "new_features": new_features,
             },
@@ -229,7 +238,7 @@ class FeatureSetComparator:
             level = "NO_STABLE_EVIDENCE"
             promote = False
         return {
-            "promote_gold_feature_set": promote,
+            "promote_enhanced_feature_set": promote,
             "evidence_level": level,
             "better_folds": better_folds,
             "total_folds": total_folds,
@@ -239,10 +248,11 @@ class FeatureSetComparator:
     def _write(self, report, fold_rows, oof) -> None:
         out = self._config.output_dir
         out.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame([row.as_dict() for row in fold_rows]).to_csv(out / "gold_ab_folds.csv", index=False)
-        oof.to_parquet(out / "gold_ab_oof_predictions.parquet", index=False)
-        oof.to_csv(out / "gold_ab_oof_predictions.csv", index=False)
-        (out / "gold_ab_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        prefix = self._config.artifact_prefix
+        pd.DataFrame([row.as_dict() for row in fold_rows]).to_csv(out / f"{prefix}_folds.csv", index=False)
+        oof.to_parquet(out / f"{prefix}_oof_predictions.parquet", index=False)
+        oof.to_csv(out / f"{prefix}_oof_predictions.csv", index=False)
+        (out / f"{prefix}_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     @staticmethod
     def _validate_pair(base: DevelopmentFeatureSet, enhanced: DevelopmentFeatureSet) -> None:
