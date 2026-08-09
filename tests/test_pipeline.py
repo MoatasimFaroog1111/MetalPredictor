@@ -15,6 +15,7 @@ from metal_predictor.targets import NextHourTargetBuilder
 
 C = ColumnConfig()
 
+
 def sample_frame(rows=400):
     ts = pd.date_range("2025-01-01", periods=rows, freq="h", tz="UTC")
     close = 1000.0 + np.arange(rows) * 0.1 + np.sin(np.arange(rows) / 12)
@@ -27,11 +28,13 @@ def sample_frame(rows=400):
         C.quality: "OK",
     })
 
+
 def test_validator_rejects_duplicate_timestamp():
     f = sample_frame()
     f.loc[1, C.timestamp] = f.loc[0, C.timestamp]
     with pytest.raises(ValueError, match="Duplicate timestamps"):
         SilverDatasetValidator(C).validate(f)
+
 
 def test_target_requires_exact_next_hour():
     f = sample_frame(10)
@@ -39,6 +42,7 @@ def test_target_requires_exact_next_hour():
     out = NextHourTargetBuilder(C).build(f)
     assert pd.isna(out.loc[4, "target_log_return_1h"])
     assert out.loc[3, "target_timestamp_utc"] == out.loc[4, C.timestamp]
+
 
 def test_momentum_is_causal_under_future_perturbation():
     f = sample_frame()
@@ -53,11 +57,13 @@ def test_momentum_is_causal_under_future_perturbation():
             baseline.loc[:cutoff, name], changed.loc[:cutoff, name], check_names=False
         )
 
+
 def test_purged_split_has_label_isolation():
     f = NextHourTargetBuilder(C).build(sample_frame()).dropna(subset=["target_timestamp_utc"]).reset_index(drop=True)
     s = ChronologicalPurgedSplitter(C, SplitConfig()).split(f)
     assert s["train"]["target_timestamp_utc"].max() < s["validation"][C.timestamp].min()
     assert s["validation"]["target_timestamp_utc"].max() < s["test"][C.timestamp].min()
+
 
 def test_leakage_guard_rejects_future_feature_name():
     f = NextHourTargetBuilder(C).build(sample_frame()).dropna(subset=["target_timestamp_utc"]).reset_index(drop=True)
@@ -70,6 +76,7 @@ def test_leakage_guard_rejects_future_feature_name():
             ("future_price",),
             ("target_log_return_1h", "target_close_usd_per_kg", "target_timestamp_utc"),
         )
+
 
 def test_full_pipeline_in_memory(tmp_path):
     from metal_predictor.core import PipelineConfig
@@ -110,3 +117,13 @@ def test_full_pipeline_in_memory(tmp_path):
     assert report["feature_count"] > 30
     assert writer.splits is not None
     assert all(len(writer.splits[name]) > 0 for name in ("train", "validation", "test"))
+
+
+def test_hour_features_require_exact_timestamp_lag():
+    frame = sample_frame(8)
+    frame.loc[5:, C.timestamp] = frame.loc[5:, C.timestamp] + pd.Timedelta(hours=3)
+    out = MomentumFeatures(C, FeatureConfig()).transform(frame)
+    assert pd.isna(out.loc[5, "log_return_1h"])
+    expected_ts = out.loc[5, C.timestamp] - pd.Timedelta(hours=3)
+    exists = bool((out[C.timestamp] == expected_ts).any())
+    assert pd.isna(out.loc[5, "log_return_3h"]) is (not exists)
