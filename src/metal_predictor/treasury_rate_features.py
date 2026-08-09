@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from metal_predictor.core import ColumnConfig
+from metal_predictor.decision_time import CompletedHourlyBarDecisionClock, DecisionClock
 from metal_predictor.published_state import PublishedStateAligner
 
 
@@ -18,10 +19,12 @@ class TreasuryRateFeatures:
         rates: pd.DataFrame,
         aligner: PublishedStateAligner,
         silver_columns: ColumnConfig,
+        decision_clock: DecisionClock | None = None,
     ) -> None:
         self._rates = self._validate_rates(rates)
         self._aligner = aligner
         self._c = silver_columns
+        self._decision_clock = decision_clock or CompletedHourlyBarDecisionClock()
         names = [
             "rates_has_published_state",
             "rates_publication_age_hours",
@@ -47,24 +50,29 @@ class TreasuryRateFeatures:
 
     def transform(self, frame: pd.DataFrame) -> pd.DataFrame:
         out = frame.copy(deep=True)
-        ts = pd.to_datetime(out[self._c.timestamp], utc=True, errors="raise")
+        bar_start = pd.to_datetime(out[self._c.timestamp], utc=True, errors="raise")
+        decision_time = self._decision_clock.available_at(bar_start)
         published = self._feature_table()
         numeric_columns = tuple(
             column for column in published.columns
             if column not in {"available_from_utc", "observation_date"}
         )
         aligned = self._aligner.align(
-            ts,
+            decision_time,
             published,
             value_columns=("observation_date", *numeric_columns),
         )
 
-        available = pd.to_datetime(aligned.pop("available_from_utc"), utc=True, errors="coerce")
+        available = pd.to_datetime(
+            aligned.pop("available_from_utc"), utc=True, errors="coerce"
+        )
         aligned.pop("observation_date")
         age = pd.to_numeric(aligned.pop("published_state_age_hours"), errors="coerce")
         out["rates_has_published_state"] = available.notna().astype("int8")
         out["rates_publication_age_hours"] = age
-        out["rates_new_release_within_1h"] = age.between(0.0, 1.0, inclusive="both").fillna(False).astype("int8")
+        out["rates_new_release_within_1h"] = (
+            age.between(0.0, 1.0, inclusive="both").fillna(False).astype("int8")
+        )
         for column in numeric_columns:
             out[column] = pd.to_numeric(aligned[column], errors="coerce")
         return out
@@ -111,8 +119,12 @@ class TreasuryRateFeatures:
         if missing:
             raise ValueError(f"Treasury rates frame missing columns: {sorted(missing)}")
         out = frame.copy(deep=True)
-        out["observation_date"] = pd.to_datetime(out["observation_date"], errors="raise").dt.normalize()
-        out["available_from_utc"] = pd.to_datetime(out["available_from_utc"], utc=True, errors="raise")
+        out["observation_date"] = pd.to_datetime(
+            out["observation_date"], errors="raise"
+        ).dt.normalize()
+        out["available_from_utc"] = pd.to_datetime(
+            out["available_from_utc"], utc=True, errors="raise"
+        )
         out = out.sort_values("available_from_utc").reset_index(drop=True)
         if out["available_from_utc"].duplicated().any():
             raise ValueError("Treasury publication timestamps must be unique.")
