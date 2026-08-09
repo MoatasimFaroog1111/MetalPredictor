@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metal-predictor"
+version = "0.1.0"
+description = "Leakage-safe hourly silver forecasting data pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "pyarrow>=17.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
