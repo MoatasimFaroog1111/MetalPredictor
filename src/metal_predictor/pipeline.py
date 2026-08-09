@@ -3,8 +3,10 @@ import json
 import numpy as np
 import pandas as pd
 
+
 class TrainingDataPipeline:
     """Coordinates independent components; contains no feature or model logic."""
+
     def __init__(self, config, loader, validator, feature_components,
                  target_builder, splitter, leakage_guard, writer) -> None:
         self._config = config
@@ -54,15 +56,22 @@ class TrainingDataPipeline:
         return out
 
     def _finalize(self, frame, feature_names, target_names):
-        required = list(feature_names) + list(target_names)
-        usable = frame.dropna(subset=required).copy()
-        matrix = usable.loc[:, feature_names].apply(pd.to_numeric, errors="coerce").to_numpy(float)
-        usable = usable.loc[np.isfinite(matrix).all(axis=1)].copy()
+        # Targets are mandatory. Long-horizon exact-time features are allowed to be
+        # missing around genuine market gaps; their availability is represented by
+        # has_exact_* features and imputation, if required by a model, must be fit
+        # on Train only in the model-preprocessing stage.
+        usable = frame.dropna(subset=list(target_names)).copy()
+        matrix = usable.loc[:, feature_names].apply(pd.to_numeric, errors="coerce")
+        inf_mask = np.isinf(matrix.to_numpy(float)).any(axis=1)
+        usable = usable.loc[~inf_mask].copy()
         return usable.sort_values(self._config.columns.timestamp).reset_index(drop=True)
 
     def _quality_report(self, raw_rows, post_quality_rows, usable, splits, feature_names):
         c = self._config.columns
         ts = pd.to_datetime(usable[c.timestamp], utc=True)
+        feature_frame = usable.loc[:, feature_names].apply(pd.to_numeric, errors="coerce")
+        missing_cells = int(feature_frame.isna().sum().sum())
+        rows_with_optional_missing = int(feature_frame.isna().any(axis=1).sum())
         return {
             "status": "PASS",
             "input_rows": int(raw_rows),
@@ -70,10 +79,13 @@ class TrainingDataPipeline:
             "usable_rows": int(len(usable)),
             "dropped_rows_total": int(raw_rows - len(usable)),
             "feature_count": len(feature_names),
+            "rows_with_optional_feature_missingness": rows_with_optional_missing,
+            "optional_feature_missing_cells": missing_cells,
             "first_usable_timestamp_utc": ts.min().isoformat(),
             "last_usable_timestamp_utc": ts.max().isoformat(),
             "split_rows": {k: int(len(v)) for k, v in splits.items()},
             "target_horizon_hours": self._config.target_horizon_hours,
             "strict_quality_only": self._config.strict_quality_only,
+            "missing_feature_policy": "Preserve exact-time NaN; impute on Train only if model requires it.",
             "leakage_checks": "PASS",
         }
