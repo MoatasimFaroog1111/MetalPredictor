@@ -1,0 +1,67 @@
+name: Cross-Asset VIX Research
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vix-feature-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run component and leakage tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_vix.py
+
+      - name: Build silver baseline training data
+        run: python build_training_dataset.py
+
+      - name: Build publication-aware Cboe VIX dataset
+        run: python build_vix_dataset.py
+
+      - name: Show VIX source and timing report
+        run: cat data/market/VIX_DAILY_quality_report.json
+
+      - name: Build silver plus VIX training data
+        run: python build_vix_cross_asset_dataset.py
+
+      - name: Compare A silver-only vs E silver-plus-VIX on development only
+        run: python compare_vix_features.py
+
+      - name: Show paired VIX feature report
+        run: cat artifacts/cross_asset_vix/vix_ae_report.json
+
+      - name: Upload VIX research artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-vix-cross-asset-research
+          path: |
+            data/market/VIX_DAILY_PUBLICATION_AWARE.parquet
+            data/market/VIX_DAILY_PUBLICATION_AWARE.csv
+            data/market/VIX_DAILY_quality_report.json
+            data/processed_vix/
+            artifacts/cross_asset_vix/
+          if-no-files-found: error
