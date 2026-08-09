@@ -4,6 +4,8 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
+from pandas.tseries.holiday import USFederalHolidayCalendar
+from pandas.tseries.offsets import CustomBusinessDay
 
 from metal_predictor.core import ColumnConfig
 from metal_predictor.publication_time import H15PublicationPolicy
@@ -68,11 +70,10 @@ def _silver(rows: int = 500) -> pd.DataFrame:
 
 
 def _rates(days: int = 60) -> pd.DataFrame:
-    observation = pd.bdate_range("2024-12-01", periods=days)
-    available = []
+    business_day = CustomBusinessDay(calendar=USFederalHolidayCalendar())
+    observation = pd.date_range("2024-12-02", periods=days, freq=business_day)
     policy = H15PublicationPolicy()
-    for ts in observation:
-        available.append(policy.available_from_utc(pd.Series([ts])).iloc[0])
+    available = policy.available_from_utc(pd.Series(observation))
     x = np.arange(days, dtype=float)
     return pd.DataFrame({
         "observation_date": observation,
