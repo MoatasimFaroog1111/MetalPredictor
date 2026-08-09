@@ -8,12 +8,23 @@ from pandas.tseries.holiday import USFederalHolidayCalendar
 from pandas.tseries.offsets import CustomBusinessDay
 
 from metal_predictor.core import ColumnConfig
+from metal_predictor.decision_time import CompletedHourlyBarDecisionClock
 from metal_predictor.publication_time import H15PublicationPolicy
 from metal_predictor.published_state import PublishedStateAligner
 from metal_predictor.treasury_rate_features import TreasuryRateFeatures
 
 
 C = ColumnConfig()
+
+
+def test_completed_hourly_bar_decision_time_is_one_hour_after_bar_label() -> None:
+    starts = pd.Series(pd.to_datetime([
+        "2026-07-28 19:00:00+00:00",
+        "2026-07-28 20:00:00+00:00",
+    ]))
+    decisions = CompletedHourlyBarDecisionClock().available_at(starts)
+    assert decisions.iloc[0] == pd.Timestamp("2026-07-28 20:00:00", tz="UTC")
+    assert decisions.iloc[1] == pd.Timestamp("2026-07-28 21:00:00", tz="UTC")
 
 
 def test_h15_publication_policy_is_dst_aware_and_next_business_day() -> None:
@@ -91,17 +102,18 @@ def _rates(days: int = 60) -> pd.DataFrame:
 def test_treasury_features_are_causal_under_later_release_perturbation() -> None:
     silver = _silver()
     rates = _rates(80)
-    cutoff = pd.Timestamp("2025-01-12 12:00:00", tz="UTC")
+    decision_cutoff = pd.Timestamp("2025-01-12 12:00:00", tz="UTC")
     component = TreasuryRateFeatures(rates, PublishedStateAligner(), C)
     baseline = component.transform(silver)
 
     changed_rates = rates.copy()
-    later = pd.to_datetime(changed_rates["available_from_utc"], utc=True) > cutoff
+    later = pd.to_datetime(changed_rates["available_from_utc"], utc=True) > decision_cutoff
     changed_rates.loc[later, ["rate_2y_percent", "rate_10y_percent"]] += 10.0
     changed_component = TreasuryRateFeatures(changed_rates, PublishedStateAligner(), C)
     changed = changed_component.transform(silver)
 
-    rows = pd.to_datetime(silver[C.timestamp], utc=True) <= cutoff
+    decisions = CompletedHourlyBarDecisionClock().available_at(silver[C.timestamp])
+    rows = decisions <= decision_cutoff
     pd.testing.assert_frame_equal(
         baseline.loc[rows, component.feature_names].reset_index(drop=True),
         changed.loc[rows, changed_component.feature_names].reset_index(drop=True),
@@ -117,7 +129,7 @@ def test_rate_feature_names_contain_no_future_or_target_tokens() -> None:
     assert not any("future" in name or "target" in name or "next_" in name for name in names)
 
 
-def test_new_release_flag_only_turns_on_after_publication() -> None:
+def test_release_during_current_bar_is_available_at_bar_completion_only() -> None:
     rates = pd.DataFrame({
         "observation_date": pd.to_datetime(["2026-07-27"]),
         "available_from_utc": [pd.Timestamp("2026-07-28 20:15:00", tz="UTC")],
@@ -126,9 +138,9 @@ def test_new_release_flag_only_turns_on_after_publication() -> None:
     })
     silver = pd.DataFrame({
         C.timestamp: pd.to_datetime([
+            "2026-07-28 19:00:00+00:00",
             "2026-07-28 20:00:00+00:00",
             "2026-07-28 21:00:00+00:00",
-            "2026-07-28 22:00:00+00:00",
         ]),
         C.open: [1000.0] * 3,
         C.high: [1001.0] * 3,
@@ -138,5 +150,7 @@ def test_new_release_flag_only_turns_on_after_publication() -> None:
     })
     out = TreasuryRateFeatures(rates, PublishedStateAligner(), C).transform(silver)
     assert out.loc[0, "rates_has_published_state"] == 0
+    assert out.loc[1, "rates_has_published_state"] == 1
     assert out.loc[1, "rates_new_release_within_1h"] == 1
+    assert np.isclose(out.loc[1, "rates_publication_age_hours"], 0.75)
     assert out.loc[2, "rates_new_release_within_1h"] == 0

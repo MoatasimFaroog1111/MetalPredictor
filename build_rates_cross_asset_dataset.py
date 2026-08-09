@@ -62,7 +62,9 @@ def build() -> dict[str, object]:
         "cross_asset": "US Treasury 2Y/10Y publication-aware state",
         "base_plus_rates_feature_count": int(manifest["feature_count"]),
         "rates_source_path": str(RATES_PATH),
-        "alignment": "latest state with available_from_utc <= feature timestamp",
+        "bar_label_semantics": "timestamp_utc is H1 bar start",
+        "decision_time_semantics": "timestamp_utc + 1 hour, after current H1 bar completes",
+        "alignment": "latest state with available_from_utc <= completed-bar decision time",
         "raw_observation_date_used_for_alignment": False,
         "market_price_forward_fill": False,
     }
