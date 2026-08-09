@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 from metal_predictor.core import ColumnConfig
 
+
 class StrictLeakageGuard:
-    """Fails on future-data, target contamination, split overlap, or nonfinite features."""
     _FORBIDDEN_FEATURE_TOKENS = ("target", "future", "lead", "next_", "shift_minus")
 
     def __init__(self, columns: ColumnConfig) -> None:
@@ -12,8 +12,9 @@ class StrictLeakageGuard:
 
     def validate(self, full_frame, splits, feature_names, target_names) -> None:
         self._validate_feature_names(feature_names, target_names)
-        self._validate_finite_features(full_frame, feature_names)
+        self._validate_feature_values(full_frame, feature_names)
         self._validate_target_time(full_frame)
+        self._validate_targets(full_frame, target_names)
         self._validate_split_order(splits)
 
     def _validate_feature_names(self, feature_names, target_names) -> None:
@@ -25,15 +26,21 @@ class StrictLeakageGuard:
         for name in feature_names:
             low = name.lower()
             if any(token in low for token in self._FORBIDDEN_FEATURE_TOKENS):
-                raise ValueError(f"Suspicious future-looking feature name: {name}")
+                raise ValueError(f"Suspicious forward-looking feature name: {name}")
 
-    def _validate_finite_features(self, frame, feature_names) -> None:
+    def _validate_feature_values(self, frame, feature_names) -> None:
         missing = [name for name in feature_names if name not in frame.columns]
         if missing:
             raise ValueError(f"Declared features not present: {missing}")
         matrix = frame.loc[:, feature_names].apply(pd.to_numeric, errors="coerce").to_numpy(float)
-        if not np.isfinite(matrix).all():
-            raise ValueError("Feature matrix contains NaN or infinite values.")
+        if np.isinf(matrix).any():
+            raise ValueError("Feature matrix contains infinite values.")
+
+    def _validate_targets(self, frame, target_names) -> None:
+        numeric_names = [name for name in target_names if name != "target_timestamp_utc"]
+        numeric = frame.loc[:, numeric_names].apply(pd.to_numeric, errors="coerce").to_numpy(float)
+        if not np.isfinite(numeric).all():
+            raise ValueError("Targets contain missing or infinite values.")
 
     def _validate_target_time(self, frame) -> None:
         feature_ts = pd.to_datetime(frame[self._c.timestamp], utc=True)
