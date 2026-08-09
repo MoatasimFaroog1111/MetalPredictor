@@ -22,12 +22,18 @@ class PublishedStateAligner:
         if missing:
             raise ValueError(f"Published state missing columns: {sorted(missing)}")
 
+        feature_ts = pd.to_datetime(feature_timestamps, utc=True, errors="raise").astype(
+            "datetime64[ns, UTC]"
+        )
         left = pd.DataFrame({
             "__row": feature_timestamps.index,
-            "__feature_timestamp": pd.to_datetime(feature_timestamps, utc=True, errors="raise"),
+            "__feature_timestamp": feature_ts,
         }).sort_values("__feature_timestamp")
+
         right = published.loc[:, [available_name, *value_columns]].copy()
-        right[available_name] = pd.to_datetime(right[available_name], utc=True, errors="raise")
+        right[available_name] = pd.to_datetime(
+            right[available_name], utc=True, errors="raise"
+        ).astype("datetime64[ns, UTC]")
         right = right.sort_values(available_name)
         if right[available_name].duplicated().any():
             raise ValueError("Published-state availability timestamps must be unique.")
@@ -41,11 +47,16 @@ class PublishedStateAligner:
             allow_exact_matches=True,
         )
         observed = merged[available_name].notna()
-        if (merged.loc[observed, available_name] > merged.loc[observed, "__feature_timestamp"]).any():
+        if (
+            merged.loc[observed, available_name]
+            > merged.loc[observed, "__feature_timestamp"]
+        ).any():
             raise AssertionError("PublishedStateAligner exposed a future release.")
         merged["published_state_age_hours"] = (
             merged["__feature_timestamp"] - merged[available_name]
         ).dt.total_seconds().div(3600.0)
         merged = merged.sort_values("__row").set_index("__row")
         merged.index.name = feature_timestamps.index.name
-        return merged.loc[:, [available_name, *value_columns, "published_state_age_hours"]]
+        return merged.loc[
+            :, [available_name, *value_columns, "published_state_age_hours"]
+        ]
