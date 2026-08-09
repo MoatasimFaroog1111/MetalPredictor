@@ -7,4 +7,5 @@ data/market/
 data/processed/
 data/processed_gold/
 data/processed_dxy/
+data/processed_rates/
 artifacts/
