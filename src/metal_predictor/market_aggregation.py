@@ -6,9 +6,7 @@ import numpy as np
 import pandas as pd
 
 from metal_predictor.market_source import DownloadWindow, InstrumentSpec
-
-
-TROY_OZ_PER_KG = 32.15074656862798
+from metal_predictor.price_normalization import HourlyPriceNormalizer, PreciousMetalUsdKgNormalizer
 
 
 @dataclass(frozen=True)
@@ -32,9 +30,13 @@ class H1AggregationReport:
 
 
 class ConservativeH1Aggregator:
-    """Aggregates M1 -> H1 while excluding ambiguous source hours instead of guessing quote order."""
+    """Quality-focused M1->H1 aggregation; source-unit conversion is injected as a strategy."""
 
     _PRICE = ("open", "high", "low", "close")
+
+    def __init__(self, normalizer: HourlyPriceNormalizer | None = None) -> None:
+        # Backward-compatible metal default; non-metal callers must inject their own strategy.
+        self._normalizer = normalizer or PreciousMetalUsdKgNormalizer()
 
     def aggregate(
         self,
@@ -73,14 +75,13 @@ class ConservativeH1Aggregator:
 
         usable = raw.loc[~raw["hour_utc"].isin(suspicious_hours)].copy()
         usable = usable.sort_values(["timestamp_utc", "archive_sequence", "source_row_number"])
-        # Identical duplicates are safe to collapse after all conflicting/overfull hours are excluded.
         usable = usable.drop_duplicates(subset=["timestamp_utc"], keep="first")
 
         hourly = usable.groupby("hour_utc", sort=True).agg(
-            open_usd_per_oz=("open", "first"),
-            high_usd_per_oz=("high", "max"),
-            low_usd_per_oz=("low", "min"),
-            close_usd_per_oz=("close", "last"),
+            open_source=("open", "first"),
+            high_source=("high", "max"),
+            low_source=("low", "min"),
+            close_source=("close", "last"),
             minute_count=("timestamp_utc", "size"),
         ).reset_index(names="timestamp_utc")
 
@@ -92,15 +93,13 @@ class ConservativeH1Aggregator:
         if (hourly["minute_count"] > 60).any():
             raise AssertionError("H1 aggregation produced an impossible >60 unique-minute hour.")
 
-        for side in ("open", "high", "low", "close"):
-            hourly[f"{side}_usd_per_kg"] = hourly[f"{side}_usd_per_oz"] * TROY_OZ_PER_KG
-
+        hourly = self._normalizer.normalize(hourly)
         hourly["asset"] = instrument.asset
         hourly["source_symbol"] = instrument.source_symbol
         hourly["source_provider"] = instrument.provider
         hourly["market_type"] = instrument.market_type
         hourly["currency"] = "USD"
-        hourly["price_unit"] = "USD/kg"
+        hourly["price_unit"] = self._normalizer.value_unit
         hourly["quality_flag"] = np.where(
             hourly["minute_count"].eq(60), "OK", "PARTIAL_SOURCE_HOUR"
         )
@@ -128,15 +127,17 @@ class ConservativeH1Aggregator:
         ts = pd.to_datetime(hourly["timestamp_utc"], utc=True, errors="raise")
         if ts.duplicated().any() or not ts.is_monotonic_increasing:
             raise ValueError("Hourly market data timestamps must be unique and chronological.")
-        prices = hourly[[
-            "open_usd_per_kg", "high_usd_per_kg", "low_usd_per_kg", "close_usd_per_kg"
-        ]].astype(float)
-        if not np.isfinite(prices.to_numpy()).all() or (prices <= 0).any().any():
-            raise ValueError("Hourly market data contains invalid prices.")
+        value_columns = ["open_value", "high_value", "low_value", "close_value"]
+        missing = set(value_columns).difference(hourly.columns)
+        if missing:
+            raise ValueError(f"Normalizer did not produce canonical value columns: {sorted(missing)}")
+        values = hourly[value_columns].astype(float)
+        if not np.isfinite(values.to_numpy()).all() or (values <= 0).any().any():
+            raise ValueError("Hourly market data contains invalid normalized values.")
         invalid = (
-            (prices["high_usd_per_kg"] < prices["low_usd_per_kg"])
-            | (prices["high_usd_per_kg"] < prices[["open_usd_per_kg", "close_usd_per_kg"]].max(axis=1))
-            | (prices["low_usd_per_kg"] > prices[["open_usd_per_kg", "close_usd_per_kg"]].min(axis=1))
+            (values["high_value"] < values["low_value"])
+            | (values["high_value"] < values[["open_value", "close_value"]].max(axis=1))
+            | (values["low_value"] > values[["open_value", "close_value"]].min(axis=1))
         )
         if invalid.any():
             raise ValueError(f"Hourly market data has {int(invalid.sum())} OHLC invariant failures.")
