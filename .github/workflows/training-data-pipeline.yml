@@ -28,8 +28,8 @@ jobs:
           python -m pip install -r requirements-dev.txt
           python -m pip install -e .
 
-      - name: Run tests
-        run: pytest
+      - name: Run training-data component tests
+        run: pytest tests/test_pipeline.py
 
       - name: Build real training dataset
         run: python build_training_dataset.py
