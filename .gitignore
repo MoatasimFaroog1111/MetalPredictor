@@ -1,1 +1,9 @@
 .env
+__pycache__/
+*.pyc
+.pytest_cache/
+data/raw/
+data/market/
+data/processed/
+data/processed_gold/
+artifacts/
