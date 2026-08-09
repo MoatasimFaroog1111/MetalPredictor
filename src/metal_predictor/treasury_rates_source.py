@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from io import BytesIO
-from pathlib import Path
 from urllib.request import Request, urlopen
 
 import numpy as np
@@ -44,22 +43,32 @@ class TreasuryDailyParYieldCurveClient:
         end = pd.Timestamp(window.end_utc).tz_convert("UTC").date()
         frames = [self._fetch_year(year) for year in range(start.year, end.year + 1)]
         raw = pd.concat(frames, ignore_index=True)
-        raw = raw.loc[raw["observation_date"].between(pd.Timestamp(start), pd.Timestamp(end))].copy()
-        raw = raw.sort_values("observation_date").drop_duplicates("observation_date", keep="last").reset_index(drop=True)
+        raw = raw.loc[
+            raw["observation_date"].between(pd.Timestamp(start), pd.Timestamp(end))
+        ].copy()
+        raw = (
+            raw.sort_values("observation_date")
+            .drop_duplicates("observation_date", keep="last")
+            .reset_index(drop=True)
+        )
         if raw.empty:
             raise ValueError("Treasury source returned no rows in requested window.")
 
         raw["available_from_utc"] = self._publication.available_from_utc(raw["observation_date"])
         raw["rate_2y_percent"] = pd.to_numeric(raw["rate_2y_percent"], errors="coerce")
         raw["rate_10y_percent"] = pd.to_numeric(raw["rate_10y_percent"], errors="coerce")
-        finite_any = np.isfinite(raw[["rate_2y_percent", "rate_10y_percent"]].to_numpy(float)).any(axis=1)
+        finite_any = np.isfinite(
+            raw[["rate_2y_percent", "rate_10y_percent"]].to_numpy(float)
+        ).any(axis=1)
         raw = raw.loc[finite_any].reset_index(drop=True)
         if raw["available_from_utc"].duplicated().any():
             raise ValueError("Multiple Treasury observations map to the same H.15 publication timestamp.")
         if not raw["available_from_utc"].is_monotonic_increasing:
             raise ValueError("Treasury publication timestamps are not chronological.")
 
-        delayed = raw["observation_date"].dt.date.isin(self._publication._TREASURY_DELAY_OVERRIDES).sum()
+        delayed = raw["observation_date"].dt.date.isin(
+            self._publication.delayed_observation_dates
+        ).sum()
         report = TreasuryRatesReport(
             rows=int(len(raw)),
             first_observation_date=str(raw["observation_date"].iloc[0].date()),
@@ -90,8 +99,7 @@ class TreasuryDailyParYieldCurveClient:
             "rate_2y_percent": frame[two_col],
             "rate_10y_percent": frame[ten_col],
         })
-        out = out.dropna(subset=["observation_date"]).reset_index(drop=True)
-        return out
+        return out.dropna(subset=["observation_date"]).reset_index(drop=True)
 
     @staticmethod
     def _find_column(frame: pd.DataFrame, candidates: tuple[str, ...]) -> str:
@@ -100,4 +108,6 @@ class TreasuryDailyParYieldCurveClient:
             key = candidate.strip().lower()
             if key in normalized:
                 return normalized[key]
-        raise ValueError(f"Treasury CSV missing expected column among {candidates}; got {list(frame.columns)}")
+        raise ValueError(
+            f"Treasury CSV missing expected column among {candidates}; got {list(frame.columns)}"
+        )
