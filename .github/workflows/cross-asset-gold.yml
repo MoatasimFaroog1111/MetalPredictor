@@ -1,0 +1,67 @@
+name: Cross-Asset Gold Research
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gold-feature-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run component and leakage tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_gold.py
+
+      - name: Build silver baseline training data
+        run: python build_training_dataset.py
+
+      - name: Build XAU hourly dataset from HistData
+        run: python build_gold_dataset.py
+
+      - name: Show XAU quality report
+        run: cat data/market/XAUUSD_H1_quality_report.json
+
+      - name: Build silver plus gold training data
+        run: python build_cross_asset_dataset.py
+
+      - name: Compare A silver-only vs B silver-plus-gold on development only
+        run: python compare_gold_features.py
+
+      - name: Show paired Gold feature report
+        run: cat artifacts/cross_asset_gold/gold_ab_report.json
+
+      - name: Upload gold research artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-gold-cross-asset-research
+          path: |
+            data/market/XAUUSD_H1_USD_PER_KG.parquet
+            data/market/XAUUSD_H1_USD_PER_KG.csv
+            data/market/XAUUSD_H1_quality_report.json
+            data/processed_gold/
+            artifacts/cross_asset_gold/
+          if-no-files-found: error
