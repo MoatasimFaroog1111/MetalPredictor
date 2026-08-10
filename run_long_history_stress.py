@@ -46,6 +46,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             first_evaluation_year=2012,
             last_evaluation_year=2026,
             min_train_rows=5000,
+            skip_insufficient_train_years=True,
         )
     )
     evaluator = HistoricalStressEvaluator(splitter)
@@ -63,6 +64,12 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     report["feature_count"] = len(assembler.feature_names)
     report["feature_names"] = list(assembler.feature_names)
     report["future_holdout_files_loaded"] = False
+    report["split_policy"] = {
+        "first_candidate_evaluation_year": 2012,
+        "last_candidate_evaluation_year": 2026,
+        "minimum_purged_training_rows": 5000,
+        "undertrained_early_years": "skip; never relax the fixed minimum",
+    }
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     report_path = args.output_dir / "long_history_stress_report.json"
