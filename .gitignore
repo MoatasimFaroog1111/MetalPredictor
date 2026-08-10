@@ -9,4 +9,5 @@ data/processed_gold/
 data/processed_dxy/
 data/processed_rates/
 data/processed_vix/
+data/processed_cftc/
 artifacts/

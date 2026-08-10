@@ -1,0 +1,67 @@
+name: Cross-Asset CFTC Silver COT Research
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cftc-feature-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run component and leakage tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_cftc.py
+
+      - name: Build silver baseline training data
+        run: python build_training_dataset.py
+
+      - name: Build publication-aware CFTC Silver COT dataset
+        run: python build_cftc_silver_cot_dataset.py
+
+      - name: Show CFTC source and timing report
+        run: cat data/market/CFTC_SILVER_084691_quality_report.json
+
+      - name: Build silver plus CFTC training data
+        run: python build_cftc_cross_asset_dataset.py
+
+      - name: Compare A silver-only vs F silver-plus-CFTC on development only
+        run: python compare_cftc_features.py
+
+      - name: Show paired CFTC feature report
+        run: cat artifacts/cross_asset_cftc/cftc_af_report.json
+
+      - name: Upload CFTC research artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-cftc-cot-research
+          path: |
+            data/market/CFTC_SILVER_084691_COT_PUBLICATION_AWARE.parquet
+            data/market/CFTC_SILVER_084691_COT_PUBLICATION_AWARE.csv
+            data/market/CFTC_SILVER_084691_quality_report.json
+            data/processed_cftc/
+            artifacts/cross_asset_cftc/
+          if-no-files-found: error
