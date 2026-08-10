@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import httpx
+import httpx2 as httpx
 import numpy as np
 import pandas as pd
 import pytest
@@ -76,46 +76,47 @@ def test_fastapi_health_pwa_and_protected_manual_ingest(tmp_path: Path) -> None:
         database_path=tmp_path / "api.sqlite3",
         admin_token="test-admin-token",
     )
-    client = TestClient(create_app(settings))
-    assert client.get("/api/v1/health").json()["buy_sell_enabled"] is False
-    assert client.get("/").status_code == 200
-    sw = client.get("/sw.js")
-    assert sw.status_code == 200
-    assert sw.headers["service-worker-allowed"] == "/"
-    assert client.get("/api/v1/forecast/latest").status_code == 404
+    with TestClient(create_app(settings)) as client:
+        assert client.get("/api/v1/health").json()["buy_sell_enabled"] is False
+        assert client.get("/").status_code == 200
+        sw = client.get("/sw.js")
+        assert sw.status_code == 200
+        assert sw.headers["service-worker-allowed"] == "/"
+        assert client.get("/api/v1/forecast/latest").status_code == 404
 
-    timestamp, close = _next_historical_hour()
-    payload = {
-        "timestamp_utc": timestamp.isoformat(),
-        "open_usd_per_kg": close,
-        "high_usd_per_kg": close * 1.001,
-        "low_usd_per_kg": close * 0.999,
-        "close_usd_per_kg": close,
-        "minute_count": 60,
-        "quality_flag": "OK",
-    }
-    assert client.post("/api/v1/market/silver/hourly", json=payload).status_code == 401
-    response = client.post(
-        "/api/v1/market/silver/hourly",
-        json=payload,
-        headers={"X-Admin-Token": "test-admin-token"},
-    )
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["bar_created"] is True
-    assert body["forecast_created"] is True
-    assert body["forecast"]["baseline_model"] == "ridge_alpha_100"
-    assert body["forecast"]["research_only"] is True
+        timestamp, close = _next_historical_hour()
+        payload = {
+            "timestamp_utc": timestamp.isoformat(),
+            "open_usd_per_kg": close,
+            "high_usd_per_kg": close * 1.001,
+            "low_usd_per_kg": close * 0.999,
+            "close_usd_per_kg": close,
+            "minute_count": 60,
+            "quality_flag": "OK",
+        }
+        unauthorized = client.post("/api/v1/market/silver/hourly", json=payload)
+        assert unauthorized.status_code == 401, unauthorized.text
+        response = client.post(
+            "/api/v1/market/silver/hourly",
+            json=payload,
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["bar_created"] is True
+        assert body["forecast_created"] is True
+        assert body["forecast"]["baseline_model"] == "ridge_alpha_100"
+        assert body["forecast"]["research_only"] is True
 
-    second = client.post(
-        "/api/v1/market/silver/hourly",
-        json=payload,
-        headers={"X-Admin-Token": "test-admin-token"},
-    )
-    assert second.status_code == 200
-    assert second.json()["bar_created"] is False
-    assert second.json()["forecast_created"] is False
-    assert len(client.get("/api/v1/forecast/history").json()) == 1
+        second = client.post(
+            "/api/v1/market/silver/hourly",
+            json=payload,
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        assert second.status_code == 200
+        assert second.json()["bar_created"] is False
+        assert second.json()["forecast_created"] is False
+        assert len(client.get("/api/v1/forecast/history").json()) == 1
 
 
 def test_twelvedata_adapter_aggregates_mocked_m1_to_full_h1() -> None:
@@ -138,7 +139,10 @@ def test_twelvedata_adapter_aggregates_mocked_m1_to_full_h1() -> None:
         assert request.url.params["symbol"] == "XAG/USD"
         assert request.url.params["interval"] == "1min"
         assert request.url.params["timezone"] == "UTC"
-        return httpx.Response(200, json={"meta": {"symbol": "XAG/USD"}, "values": values, "status": "ok"})
+        return httpx.Response(
+            200,
+            json={"meta": {"symbol": "XAG/USD"}, "values": values, "status": "ok"},
+        )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     source = TwelveDataSilverMinuteSource("secret-test-key", client=client)
