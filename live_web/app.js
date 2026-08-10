@@ -95,8 +95,7 @@ function renderChart(history) {
   };
   svg.style.color = '#d8dee6';
   svg.appendChild(line(actual, '.95'));
-  const forecastLine = line(predicted, '.42', '6 6');
-  svg.appendChild(forecastLine);
+  svg.appendChild(line(predicted, '.42', '6 6'));
 }
 
 async function getJson(url, allow404=false) {
@@ -130,5 +129,5 @@ refresh();
 setInterval(refresh, 60_000);
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/static/sw.js').catch(console.error));
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', {scope:'/'}).catch(console.error));
 }
