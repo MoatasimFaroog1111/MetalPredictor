@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import httpx
+import httpx2 as httpx
 import numpy as np
 import pandas as pd
 
