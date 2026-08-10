@@ -1,0 +1,20 @@
+{
+  "name": "Silver AI Forecast",
+  "short_name": "Silver AI",
+  "description": "Research-only hourly silver forecasting dashboard",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#080a0d",
+  "theme_color": "#0b0d10",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
