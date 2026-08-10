@@ -146,6 +146,27 @@ def test_calendar_year_splitter_purges_future_target_labels() -> None:
         assert fold.train["timestamp_utc"].max() < first_validation
 
 
+def test_calendar_year_splitter_skips_undertrained_early_year_without_relaxing_minimum() -> None:
+    timestamps = pd.date_range("2011-07-01", "2014-12-31 23:00", freq="h", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "timestamp_utc": timestamps,
+            "target_timestamp_utc": timestamps + pd.Timedelta(hours=1),
+        }
+    )
+    splitter = PurgedCalendarYearSplitter(
+        AnnualStressConfig(
+            first_evaluation_year=2012,
+            last_evaluation_year=2014,
+            min_train_rows=7000,
+            skip_insufficient_train_years=True,
+        )
+    )
+    folds = splitter.split(frame)
+    assert [fold.year for fold in folds] == [2013, 2014]
+    assert all(len(fold.train) >= 7000 for fold in folds)
+
+
 def test_year_stratified_bootstrap_is_deterministic_and_keeps_positive_mean() -> None:
     frame = pd.DataFrame(
         {
