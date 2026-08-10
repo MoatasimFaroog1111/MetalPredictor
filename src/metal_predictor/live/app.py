@@ -6,6 +6,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
+from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -89,12 +90,15 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         raise FileNotFoundError(f"Live web directory not found: {static_dir}")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-    def require_admin(x_admin_token: Annotated[str | None, Header()] = None) -> None:
+    admin_header = APIKeyHeader(name="X-Admin-Token", auto_error=False)
+
+    def require_admin(
+        supplied: Annotated[str | None, Depends(admin_header)],
+    ) -> None:
         expected = config.admin_token
         if not expected:
             raise HTTPException(status_code=503, detail="LIVE_ADMIN_TOKEN is not configured.")
-        supplied = x_admin_token or ""
-        if not secrets.compare_digest(supplied, expected):
+        if not supplied or not secrets.compare_digest(supplied, expected):
             raise HTTPException(status_code=401, detail="Invalid admin token.")
 
     @app.get("/", include_in_schema=False)
