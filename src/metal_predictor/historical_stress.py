@@ -10,7 +10,7 @@ from metal_predictor.stress_reporting import (
     HistoricalStressReportBuilder,
     LongHistoryStressDecisionPolicy,
 )
-from metal_predictor.stress_split import PurgedCalendarYearSplitter
+from metal_predictor.stress_split import AnnualStressFold, PurgedCalendarYearSplitter
 from metal_predictor.stress_statistics import balanced_direction_accuracy
 
 
@@ -63,9 +63,7 @@ class HistoricalStressEvaluator:
             predictions["train_majority_sign"] = np.full(
                 len(fold.validation), majority_sign * 1e-12, dtype=float
             )
-            fold_metrics.extend(
-                self._fold_metrics(protocol, fold, predictions)
-            )
+            fold_metrics.extend(self._fold_metrics(protocol, fold, predictions))
             prediction_parts.append(self._prediction_frame(fold, predictions))
 
         folds = pd.DataFrame([item.as_dict() for item in fold_metrics])
@@ -127,7 +125,7 @@ class HistoricalStressEvaluator:
     def _fold_metrics(
         self,
         protocol: str,
-        fold: object,
+        fold: AnnualStressFold,
         predictions: dict[str, np.ndarray],
     ) -> list[StressFoldMetric]:
         c = self._config
@@ -175,7 +173,7 @@ class HistoricalStressEvaluator:
 
     def _prediction_frame(
         self,
-        fold: object,
+        fold: AnnualStressFold,
         predictions: dict[str, np.ndarray],
     ) -> pd.DataFrame:
         c = self._config
