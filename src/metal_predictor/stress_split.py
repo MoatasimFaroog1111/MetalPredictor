@@ -10,6 +10,7 @@ class AnnualStressConfig:
     first_evaluation_year: int = 2012
     last_evaluation_year: int = 2026
     min_train_rows: int = 5000
+    skip_insufficient_train_years: bool = False
     timestamp_name: str = "timestamp_utc"
     target_timestamp_name: str = "target_timestamp_utc"
 
@@ -28,7 +29,13 @@ class AnnualStressFold:
 
 
 class PurgedCalendarYearSplitter:
-    """Expanding, calendar-year validation with timestamp-aware label purging."""
+    """Expanding, calendar-year validation with timestamp-aware label purging.
+
+    When ``skip_insufficient_train_years`` is enabled, an early calendar year is
+    omitted only because its purged training history has not yet reached the fixed
+    minimum. The threshold itself is never relaxed and later eligible years remain
+    unchanged. Evaluation reports record the actual years produced.
+    """
 
     def __init__(self, config: AnnualStressConfig | None = None) -> None:
         self._config = config or AnnualStressConfig()
@@ -65,6 +72,8 @@ class PurgedCalendarYearSplitter:
                 ordered[c.target_timestamp_name].lt(first_validation)
             ].copy()
             if len(train) < c.min_train_rows:
+                if c.skip_insufficient_train_years:
+                    continue
                 raise ValueError(
                     f"Stress year {year} has only {len(train)} purged training rows."
                 )
