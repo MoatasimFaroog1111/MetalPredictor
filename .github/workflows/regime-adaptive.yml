@@ -1,0 +1,53 @@
+name: Regime Adaptive Model Research
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regime-adaptive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run regime and leakage tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_regime_adaptive.py
+
+      - name: Build leakage-safe silver development data
+        run: python build_training_dataset.py
+
+      - name: Run nested regime-adaptive research
+        run: python run_regime_adaptive_models.py
+
+      - name: Show regime-adaptive report
+        run: cat artifacts/regime_adaptive/regime_adaptive_report.json
+
+      - name: Upload regime-adaptive artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-regime-adaptive-research
+          path: artifacts/regime_adaptive/
+          if-no-files-found: error
