@@ -17,6 +17,7 @@ from metal_predictor.historical_stress import (
     HistoricalStressEvaluator,
     LongHistoryStressSuite,
 )
+from metal_predictor.local_archives import Sha256FileFingerprinter
 from metal_predictor.stress_split import AnnualStressConfig, PurgedCalendarYearSplitter
 from metal_predictor.targets import NextHourTargetBuilder
 
@@ -35,6 +36,8 @@ def _arguments() -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> dict[str, object]:
+    fingerprinter = Sha256FileFingerprinter()
+    input_fingerprint = fingerprinter.fingerprint(args.input).as_dict()
     config = PipelineConfig(input_path=args.input)
     hourly = ParquetDataLoader().load(args.input)
     assembler = SilverFeatureAssembler(config)
@@ -60,6 +63,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         "scikit_learn": sklearn.__version__,
     }
     report["input"] = str(args.input)
+    report["input_fingerprint"] = input_fingerprint
     report["input_rows"] = len(hourly)
     report["feature_count"] = len(assembler.feature_names)
     report["feature_names"] = list(assembler.feature_names)
@@ -75,9 +79,22 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     report_path = args.output_dir / "long_history_stress_report.json"
     folds_path = args.output_dir / "annual_stress_folds.csv"
     oof_path = args.output_dir / "annual_stress_oof.parquet"
+    manifest_path = args.output_dir / "stress_artifact_manifest.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     folds.to_csv(folds_path, index=False)
     oof.to_parquet(oof_path, index=False)
+
+    manifest = {
+        "schema_version": 1,
+        "input": input_fingerprint,
+        "outputs": [
+            fingerprinter.fingerprint(report_path).as_dict(),
+            fingerprinter.fingerprint(folds_path).as_dict(),
+            fingerprinter.fingerprint(oof_path).as_dict(),
+        ],
+        "future_holdout_files_loaded": False,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return report
 
 
