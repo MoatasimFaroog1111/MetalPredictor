@@ -200,3 +200,36 @@ def test_telegram_webhook_configuration_requires_https_and_sends_secret() -> Non
     assert isinstance(sent, dict)
     assert sent["secret_token"] == "secret-token"
     assert sent["allowed_updates"] == ["message"]
+
+
+def test_twelvedata_transport_error_redacts_api_key() -> None:
+    secret = "td-super-secret-key"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, request=request, json={"status": "error"})
+
+    source = TwelveDataSilverMinuteSource(
+        secret,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(RuntimeError) as captured:
+        source.fetch_completed_hour(datetime(2026, 8, 10, 10, tzinfo=timezone.utc))
+    assert secret not in str(captured.value)
+    assert "Twelve Data transport request failed" in str(captured.value)
+
+
+def test_telegram_transport_error_redacts_bot_token() -> None:
+    token = "123456:telegram-super-secret"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, request=request, json={"ok": False})
+
+    publisher = TelegramForecastPublisher(
+        token,
+        ["12345"],
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(RuntimeError) as captured:
+        publisher.send_text("12345", "test")
+    assert token not in str(captured.value)
+    assert "Telegram sendMessage transport request failed" in str(captured.value)
