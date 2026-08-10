@@ -11,7 +11,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from metal_predictor.live.app import create_app
-from metal_predictor.live.contracts import HourlySilverBar
+from metal_predictor.live.catchup import LiveMarketCatchUpService
+from metal_predictor.live.contracts import ForecastSnapshot, HourlySilverBar
 from metal_predictor.live.inference import LivePredictionEngine
 from metal_predictor.live.market_sources import TwelveDataSilverMinuteSource
 from metal_predictor.live.notifications import TelegramForecastPublisher
@@ -165,6 +166,126 @@ def test_twelvedata_adapter_aggregates_mocked_m1_to_full_h1() -> None:
     assert bar.close_usd_per_kg > 2000
 
 
+def test_twelvedata_catch_up_batches_stay_below_documented_point_limit() -> None:
+    requests: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(dict(request.url.params))
+        return httpx.Response(200, json={"status": "ok", "values": []})
+
+    source = TwelveDataSilverMinuteSource(
+        "secret-test-key",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    end = start + timedelta(hours=144)
+    assert source.fetch_completed_range(start, end) == []
+    assert len(requests) == 3
+    assert all("outputsize" not in item for item in requests)
+    for item in requests:
+        request_start = datetime.fromisoformat(item["start_date"]).replace(tzinfo=timezone.utc)
+        request_end = datetime.fromisoformat(item["end_date"]).replace(tzinfo=timezone.utc)
+        covered_minutes = int((request_end - request_start).total_seconds() // 60) + 1
+        assert covered_minutes <= 4320
+
+
+def test_catch_up_stores_context_but_materializes_only_latest_forecast(tmp_path: Path) -> None:
+    repository = SQLiteForecastRepository(tmp_path / "catchup.sqlite3")
+    historical_last = datetime(2026, 8, 7, 21, tzinfo=timezone.utc)
+    through = historical_last + timedelta(hours=3)
+    bars = [
+        _bar(historical_last + timedelta(hours=offset), 2000.0 + offset)
+        for offset in (1, 2, 3)
+    ]
+
+    class FakeEngine:
+        historical_last_datetime_utc = historical_last
+
+    class FakeSource:
+        def fetch_completed_range(self, start_hour_utc, end_hour_utc):
+            assert start_hour_utc == historical_last + timedelta(hours=1)
+            assert end_hour_utc == through
+            return bars
+
+    class FakeOrchestrator:
+        def __init__(self) -> None:
+            self.materialize_calls = 0
+
+        def ingest_bar(self, bar):
+            return repository.put_bar(bar)
+
+        def materialize_latest_forecast(self):
+            self.materialize_calls += 1
+            latest = repository.recent_bars(limit=1)[-1]
+            snapshot = ForecastSnapshot(
+                feature_timestamp_utc=latest.timestamp_utc,
+                decision_time_utc=latest.timestamp_utc + timedelta(hours=1),
+                current_price_usd_per_kg=latest.close_usd_per_kg,
+                baseline_model="ridge_alpha_100",
+                baseline_log_return_1h=0.001,
+                baseline_predicted_price_usd_per_kg=latest.close_usd_per_kg * 1.001,
+                baseline_direction="UP",
+                challenger_model="ridge_alpha_10",
+                challenger_log_return_1h=0.0011,
+                challenger_predicted_price_usd_per_kg=latest.close_usd_per_kg * 1.0011,
+                challenger_direction="UP",
+                data_quality=latest.quality_flag,
+                source_provider=latest.source_provider,
+                source_compatible_with_training=False,
+            )
+            return snapshot, repository.put_forecast(snapshot)
+
+    orchestrator = FakeOrchestrator()
+    service = LiveMarketCatchUpService(
+        FakeSource(), repository, FakeEngine(), orchestrator
+    )
+    result = service.catch_up(through)
+    assert result.fetched_bars == 3
+    assert result.created_bars == 3
+    assert result.forecast_created is True
+    assert result.forecast_timestamp_utc == through
+    assert result.status == "FORECAST_MATERIALIZED"
+    assert orchestrator.materialize_calls == 1
+    assert len(repository.recent_bars(limit=10)) == 3
+    forecasts = repository.forecast_history(limit=10)
+    assert len(forecasts) == 1
+    assert forecasts[0].feature_timestamp_utc == through
+
+
+def test_catch_up_does_not_forecast_when_latest_requested_hour_is_unavailable(tmp_path: Path) -> None:
+    repository = SQLiteForecastRepository(tmp_path / "catchup-gap.sqlite3")
+    historical_last = datetime(2026, 8, 7, 21, tzinfo=timezone.utc)
+    through = historical_last + timedelta(hours=3)
+    bars = [_bar(historical_last + timedelta(hours=1), 2001.0)]
+
+    class FakeEngine:
+        historical_last_datetime_utc = historical_last
+
+    class FakeSource:
+        def fetch_completed_range(self, start_hour_utc, end_hour_utc):
+            return bars
+
+    class FakeOrchestrator:
+        materialize_calls = 0
+
+        def ingest_bar(self, bar):
+            return repository.put_bar(bar)
+
+        def materialize_latest_forecast(self):
+            self.materialize_calls += 1
+            raise AssertionError("Must not materialize a stale catch-up hour.")
+
+    orchestrator = FakeOrchestrator()
+    service = LiveMarketCatchUpService(
+        FakeSource(), repository, FakeEngine(), orchestrator
+    )
+    result = service.catch_up(through)
+    assert result.status == "LATEST_HOUR_NOT_AVAILABLE"
+    assert result.forecast_created is False
+    assert orchestrator.materialize_calls == 0
+    assert len(repository.forecast_history(limit=10)) == 0
+
+
 def test_scheduler_uses_fixed_utc_delay_after_each_hour() -> None:
     now = datetime(2026, 8, 10, 13, 4, 59, tzinfo=timezone.utc)
     assert HourlyCollectionScheduler.next_due_utc(now, 5) == datetime(
@@ -173,6 +294,9 @@ def test_scheduler_uses_fixed_utc_delay_after_each_hour() -> None:
     now_after = datetime(2026, 8, 10, 13, 5, tzinfo=timezone.utc)
     assert HourlyCollectionScheduler.next_due_utc(now_after, 5) == datetime(
         2026, 8, 10, 14, 5, tzinfo=timezone.utc
+    )
+    assert HourlyCollectionScheduler.previous_completed_hour(now_after) == datetime(
+        2026, 8, 10, 12, 0, tzinfo=timezone.utc
     )
 
 
