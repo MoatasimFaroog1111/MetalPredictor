@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 from typing import Iterable
 
-import httpx
+import httpx2 as httpx
 
 from metal_predictor.live.contracts import ForecastSnapshot
 
