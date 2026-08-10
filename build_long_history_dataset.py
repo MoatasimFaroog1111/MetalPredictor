@@ -9,7 +9,10 @@ import numpy as np
 import pandas as pd
 import pyarrow
 
-from metal_predictor.local_archives import ContentAddressedArchiveCatalog
+from metal_predictor.local_archives import (
+    ContentAddressedArchiveCatalog,
+    Sha256FileFingerprinter,
+)
 from metal_predictor.long_history import LongHistoryH1Builder
 from metal_predictor.market_aggregation import ConservativeH1Aggregator
 from metal_predictor.market_source import (
@@ -49,20 +52,27 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         start_utc=pd.Timestamp(args.start_utc),
         end_utc=pd.Timestamp(args.end_utc),
     )
+    fingerprinter = Sha256FileFingerprinter()
     catalog_report = None
     if args.source == "metastock-local":
-        archives, catalog_report = ContentAddressedArchiveCatalog().discover(args.input_dir)
+        archives, catalog_report = ContentAddressedArchiveCatalog(
+            fingerprinter=fingerprinter
+        ).discover(args.input_dir)
         parser = MetaStockM1ArchiveParser(expected_symbol="XAGUSD")
     else:
         archives = HistDataArchiveDownloader().download(instrument, window, args.raw_dir)
         parser = GenericAsciiM1Parser()
 
+    source_fingerprints = tuple(
+        fingerprinter.fingerprint(path).as_dict() for path in archives
+    )
     builder = LongHistoryH1Builder(parser=parser, aggregator=ConservativeH1Aggregator())
     hourly, quality = builder.build(archives, instrument, window)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     parquet_path = args.output_dir / "XAGUSD_H1_2009_2026_USD_PER_KG.parquet"
     report_path = args.output_dir / "long_history_build_report.json"
     hourly.to_parquet(parquet_path, index=False)
+    output_fingerprint = fingerprinter.fingerprint(parquet_path).as_dict()
 
     report: dict[str, object] = {
         "status": "PASS",
@@ -93,8 +103,10 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             "pyarrow": pyarrow.__version__,
         },
         "archive_catalog": catalog_report.as_dict() if catalog_report else None,
+        "source_archive_fingerprints": list(source_fingerprints),
         "quality": quality.as_dict(),
         "output": str(parquet_path),
+        "output_fingerprint": output_fingerprint,
     }
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
