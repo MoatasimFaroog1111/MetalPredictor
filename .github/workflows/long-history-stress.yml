@@ -36,13 +36,13 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
-            requirements-modeling.txt
+            requirements-long-history.txt
 
       - name: Install latest stable compatible dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade --upgrade-strategy eager -r requirements-dev.txt
-          python -m pip install --upgrade --upgrade-strategy eager -r requirements-modeling.txt
+          python -m pip install --upgrade --upgrade-strategy eager -r requirements-long-history.txt
           python -m pip install -e .
 
       - name: Record runtime versions
