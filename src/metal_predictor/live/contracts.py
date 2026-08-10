@@ -54,6 +54,14 @@ class MarketBarSource(Protocol):
     def fetch_completed_hour(self, hour_start_utc: datetime) -> HourlySilverBar: ...
 
 
+class MarketBarBackfillSource(MarketBarSource, Protocol):
+    def fetch_completed_range(
+        self,
+        start_hour_utc: datetime,
+        end_hour_utc: datetime,
+    ) -> list[HourlySilverBar]: ...
+
+
 class ForecastRepository(Protocol):
     def put_bar(self, bar: HourlySilverBar) -> bool: ...
     def recent_bars(self, limit: int = 500) -> list[HourlySilverBar]: ...
