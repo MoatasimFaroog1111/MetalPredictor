@@ -59,10 +59,15 @@ class LivePredictionEngine:
     def historical_last_timestamp_utc(self) -> str:
         return self._historical_last.isoformat()
 
+    @property
+    def historical_last_datetime_utc(self) -> datetime:
+        return self._historical_last.to_pydatetime()
+
     def predict(self, live_bars: list[HourlySilverBar]) -> ForecastSnapshot:
         if not live_bars:
             raise ValueError("At least one live bar is required for live prediction.")
-        live = self._bars_frame(live_bars)
+        ordered_bars = sorted(live_bars, key=lambda item: item.timestamp_utc)
+        live = self._bars_frame(ordered_bars)
         newest = pd.Timestamp(live["timestamp_utc"].iloc[-1])
         if newest <= self._historical_last:
             raise ValueError(
@@ -82,13 +87,14 @@ class LivePredictionEngine:
         row = featured.loc[featured["timestamp_utc"].eq(newest)]
         if len(row) != 1:
             raise ValueError("Could not resolve exactly one feature row for latest live hour.")
+        self._require_complete_features(row, newest)
 
         baseline_return = float(self._baseline.predict(row)[0])
         challenger_return = float(self._challenger.predict(row)[0])
         close = float(row["close_usd_per_kg"].iloc[0])
         baseline_price = close * math.exp(baseline_return)
         challenger_price = close * math.exp(challenger_return)
-        latest_bar = live_bars[-1]
+        latest_bar = ordered_bars[-1]
 
         return ForecastSnapshot(
             feature_timestamp_utc=newest.to_pydatetime(),
@@ -124,6 +130,27 @@ class LivePredictionEngine:
             "buy_sell_enabled": False,
         }
 
+    def _require_complete_features(
+        self,
+        row: pd.DataFrame,
+        newest: pd.Timestamp,
+    ) -> None:
+        feature_frame = row.loc[:, self._baseline.feature_names]
+        numeric = feature_frame.apply(pd.to_numeric, errors="coerce")
+        values = numeric.to_numpy(dtype=float)
+        if np.isfinite(values).all():
+            return
+        missing = [
+            name
+            for name in self._baseline.feature_names
+            if not np.isfinite(float(numeric[name].iloc[0]))
+        ]
+        preview = ", ".join(missing[:8])
+        suffix = "..." if len(missing) > 8 else ""
+        raise ValueError(
+            f"LIVE_FEATURES_INCOMPLETE {newest.isoformat()} missing={preview}{suffix}"
+        )
+
     @staticmethod
     def _direction(value: float) -> str:
         if not np.isfinite(value):
@@ -138,7 +165,9 @@ class LivePredictionEngine:
     def _bars_frame(bars: list[HourlySilverBar]) -> pd.DataFrame:
         rows: list[dict[str, object]] = []
         previous: datetime | None = None
-        for bar in sorted(bars, key=lambda item: item.timestamp_utc):
+        for bar in bars:
+            if bar.timestamp_utc.tzinfo is None:
+                raise ValueError("Live bar timestamps must be timezone-aware.")
             ts = bar.timestamp_utc.astimezone(timezone.utc)
             if previous is not None and ts <= previous:
                 raise ValueError("Live bars must be unique and chronological.")
@@ -171,13 +200,22 @@ class LiveForecastOrchestrator:
         self._engine = engine
         self._notifier = notifier
 
-    def ingest_and_forecast(self, bar: HourlySilverBar) -> tuple[ForecastSnapshot, bool, bool]:
-        bar_created = self._repository.put_bar(bar)
+    def ingest_bar(self, bar: HourlySilverBar) -> bool:
+        return self._repository.put_bar(bar)
+
+    def materialize_latest_forecast(self) -> tuple[ForecastSnapshot, bool]:
         bars = self._repository.recent_bars(limit=5000)
+        if not bars:
+            raise ValueError("No live bars are available for forecast materialization.")
         snapshot = self._engine.predict(bars)
         forecast_created = self._repository.put_forecast(snapshot)
         if forecast_created and self._notifier is not None:
             self._notifier.publish_forecast(snapshot)
+        return snapshot, forecast_created
+
+    def ingest_and_forecast(self, bar: HourlySilverBar) -> tuple[ForecastSnapshot, bool, bool]:
+        bar_created = self.ingest_bar(bar)
+        snapshot, forecast_created = self.materialize_latest_forecast()
         return snapshot, bar_created, forecast_created
 
     def latest(self) -> ForecastSnapshot | None:
