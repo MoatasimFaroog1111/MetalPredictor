@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import hashlib
 from pathlib import Path
+from typing import Protocol
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,33 @@ class ArchiveFingerprint:
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+class FileFingerprinter(Protocol):
+    def fingerprint(self, path: Path) -> ArchiveFingerprint: ...
+
+
+class Sha256FileFingerprinter:
+    """Single-purpose streaming SHA-256 file fingerprint service."""
+
+    def __init__(self, chunk_size_bytes: int = 1024 * 1024) -> None:
+        if chunk_size_bytes < 4096:
+            raise ValueError("chunk_size_bytes must be >= 4096.")
+        self._chunk_size = chunk_size_bytes
+
+    def fingerprint(self, path: Path) -> ArchiveFingerprint:
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(path)
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(self._chunk_size), b""):
+                digest.update(chunk)
+        return ArchiveFingerprint(
+            path=str(path),
+            name=path.name,
+            size_bytes=path.stat().st_size,
+            sha256=digest.hexdigest(),
+        )
 
 
 @dataclass(frozen=True)
@@ -42,8 +70,13 @@ class ContentAddressedArchiveCatalog:
     coexist safely.
     """
 
-    def __init__(self, pattern: str = "HISTDATA_COM_MS_XAGUSD_M1*.zip") -> None:
+    def __init__(
+        self,
+        pattern: str = "HISTDATA_COM_MS_XAGUSD_M1*.zip",
+        fingerprinter: FileFingerprinter | None = None,
+    ) -> None:
         self._pattern = pattern
+        self._fingerprinter = fingerprinter or Sha256FileFingerprinter()
 
     def discover(self, directory: Path) -> tuple[tuple[Path, ...], ArchiveCatalogReport]:
         if not directory.exists() or not directory.is_dir():
@@ -57,15 +90,9 @@ class ContentAddressedArchiveCatalog:
         grouped: dict[str, list[Path]] = {}
         fingerprints: dict[Path, ArchiveFingerprint] = {}
         for path in paths:
-            digest = self._sha256(path)
-            fingerprint = ArchiveFingerprint(
-                path=str(path),
-                name=path.name,
-                size_bytes=path.stat().st_size,
-                sha256=digest,
-            )
+            fingerprint = self._fingerprinter.fingerprint(path)
             fingerprints[path] = fingerprint
-            grouped.setdefault(digest, []).append(path)
+            grouped.setdefault(fingerprint.sha256, []).append(path)
 
         selected: list[Path] = []
         duplicates: dict[str, tuple[str, ...]] = {}
@@ -91,11 +118,3 @@ class ContentAddressedArchiveCatalog:
             duplicates_by_sha256=duplicates,
         )
         return tuple(selected), report
-
-    @staticmethod
-    def _sha256(path: Path) -> str:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
