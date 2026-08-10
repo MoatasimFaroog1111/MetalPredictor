@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 from typing import Iterable
+from urllib.parse import urlparse
 
 import httpx2 as httpx
 
@@ -9,7 +10,7 @@ from metal_predictor.live.contracts import ForecastSnapshot
 
 
 class TelegramForecastPublisher:
-    """Minimal Telegram Bot API publisher with explicit allowlisted destinations."""
+    """Telegram Bot API publisher with allowlisted destinations and webhook setup."""
 
     def __init__(
         self,
@@ -33,19 +34,48 @@ class TelegramForecastPublisher:
             self.send_text(chat_id, text)
 
     def send_text(self, chat_id: str, text: str) -> None:
-        response = self._client.post(
-            f"https://api.telegram.org/bot{self._token}/sendMessage",
-            json={
-                "chat_id": str(chat_id),
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
+        payload = self._post("sendMessage", {
+            "chat_id": str(chat_id),
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        })
         if payload.get("ok") is not True:
             raise RuntimeError(f"Telegram sendMessage failed: {payload}")
+
+    def configure_webhook(self, public_base_url: str, secret_token: str) -> dict[str, object]:
+        base = public_base_url.strip().rstrip("/")
+        parsed = urlparse(base)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError("Telegram webhook requires a public HTTPS base URL.")
+        secret = secret_token.strip()
+        if not secret:
+            raise ValueError("Telegram webhook secret token is required.")
+        webhook_url = f"{base}/api/v1/telegram/webhook"
+        payload = self._post("setWebhook", {
+            "url": webhook_url,
+            "secret_token": secret,
+            "allowed_updates": ["message"],
+            "drop_pending_updates": False,
+        })
+        if payload.get("ok") is not True:
+            raise RuntimeError(f"Telegram setWebhook failed: {payload}")
+        return {
+            "configured": True,
+            "url": webhook_url,
+            "description": str(payload.get("description", "")),
+        }
+
+    def _post(self, method: str, payload: dict[str, object]) -> dict[str, object]:
+        response = self._client.post(
+            f"https://api.telegram.org/bot{self._token}/{method}",
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise RuntimeError(f"Telegram {method} returned a non-object response.")
+        return data
 
     @staticmethod
     def format_forecast(snapshot: ForecastSnapshot) -> str:
