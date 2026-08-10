@@ -1,0 +1,75 @@
+name: Frozen Future Holdout Final Scorer
+
+on:
+  schedule:
+    - cron: '35 6 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frozen-future-holdout-ledger
+  cancel-in-progress: false
+
+env:
+  FROZEN_CODE_SHA: '32fe84bfe745f6cd23300fdbee4aa6548bcaba8d'
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout immutable frozen code snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.FROZEN_CODE_SHA }}
+          path: frozen
+          persist-credentials: false
+
+      - name: Verify frozen code SHA
+        working-directory: frozen
+        run: test "$(git rev-parse HEAD)" = "$FROZEN_CODE_SHA"
+
+      - name: Checkout writable main ledger
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: ledger
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: frozen/requirements.txt
+
+      - name: Install frozen scorer dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r frozen/requirements.txt
+          python -m pip install frozen/
+
+      - name: Run locked one-shot scorer
+        run: |
+          python frozen/score_forward_holdout.py \
+            --frozen-root "$GITHUB_WORKSPACE/frozen" \
+            --ledger-root "$GITHUB_WORKSPACE/ledger"
+
+      - name: Commit final score once if it was created
+        working-directory: ledger
+        run: |
+          if [ ! -f forward_holdout/final_score.json ]; then
+            echo "Final score remains locked; no performance artifact exists."
+            exit 0
+          fi
+          git config user.name "metalpredictor-holdout-bot"
+          git config user.email "metalpredictor-holdout-bot@users.noreply.github.com"
+          git add forward_holdout/final_score.json
+          if git diff --cached --quiet; then
+            echo "Final score already sealed; no change."
+            exit 0
+          fi
+          git commit -m "[holdout] seal one-shot final future score"
+          git push origin HEAD:main

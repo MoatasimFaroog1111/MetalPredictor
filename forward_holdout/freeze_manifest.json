@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "freeze_id": "future-holdout-v1-20260810",
+  "protocol_predeclared_utc": "2026-08-10T07:46:14Z",
+  "research_code_cutoff_commit": "8331dea6dd8c63e432a5df963f085721410e49b2",
+  "historical_source_dataset_path": "XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet",
+  "historical_source_dataset_git_blob_sha": "9b95fcc5aa2679208c6b5c44c830ce6b1eaa5829",
+  "historical_test_forbidden_for_freeze_fit_or_tuning": true,
+  "context_start_utc": "2026-08-07T22:00:00Z",
+  "holdout_first_bar_start_utc": "2026-08-11T00:00:00Z",
+  "holdout_last_feature_bar_start_exclusive_utc": "2027-02-07T00:00:00Z",
+  "earliest_final_score_utc": "2027-02-07T02:00:00Z",
+  "minimum_exact_hour_outcomes": 2500,
+  "fixed_window_days": 180,
+  "source": {
+    "provider": "HistData",
+    "symbol": "XAGUSD",
+    "market_type": "spot_bid",
+    "source_timezone_policy": "fixed EST UTC-05:00 converted to UTC",
+    "aggregation": "M1 to H1 conservative aggregation; suspicious source hours excluded",
+    "batch_future_holdout_not_live_execution": true
+  },
+  "models": {
+    "primary": {
+      "name": "ridge_alpha_10",
+      "path": "forward_holdout/models/ridge_alpha_10.json",
+      "payload_sha256": "26f8427623accb0e55e7c9cd784a5b47fcb9143fe3124de0d604133b83dc8d79",
+      "alpha": 10.0
+    },
+    "benchmark": {
+      "name": "ridge_alpha_100",
+      "path": "forward_holdout/models/ridge_alpha_100.json",
+      "payload_sha256": "91446fd0868b3ac9ad1d75e318666d6bbc7a7ab4ea14b65849684d66a22c6585",
+      "alpha": 100.0
+    }
+  },
+  "primary_hypothesis": {
+    "model": "ridge_alpha_10",
+    "selection_locked_before_future_window": true,
+    "selection_reason": "Stage 6 found ridge_alpha_10 had the best observed pre-cost strategy Sharpe among the common development OOF strategy matrix, but its Deflated Sharpe probability was only 26.58%; therefore it is a single predeclared future challenger rather than a proven model."
+  },
+  "benchmark_hypothesis": {
+    "model": "ridge_alpha_100",
+    "role": "frozen baseline-v1 benchmark"
+  },
+  "final_score_rules": {
+    "one_shot_fixed_window": true,
+    "no_interim_performance_metrics": true,
+    "bootstrap_block_rows": 24,
+    "bootstrap_resamples": 5000,
+    "random_state": 42,
+    "six_sequential_blocks_days_each": 30,
+    "required_positive_blocks": 4,
+    "all_required_gates": [
+      "primary directional-accuracy 95% block-bootstrap lower bound > 50%",
+      "primary pre-cost directional strategy mean 95% lower bound > 0",
+      "primary MAE improvement vs zero-return 95% lower bound > 0",
+      "primary MAE improvement vs ridge_alpha_100 95% lower bound > 0",
+      "positive pre-cost strategy mean in at least 4 of 6 predeclared 30-day blocks"
+    ]
+  },
+  "interpretation_limit": "A pass can establish frozen future pre-cost predictive evidence only. Spot-bid H1 history does not establish executable spread, slippage, fees, or live order-fill performance."
+}

@@ -1,0 +1,52 @@
+name: Future Holdout Freeze Validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run future-holdout integrity tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_future_holdout.py
+
+      - name: Build historical development data without reading Test for model freeze
+        run: python build_training_dataset.py
+
+      - name: Freeze primary and benchmark Ridge numeric payloads
+        run: python freeze_future_models.py
+
+      - name: Show non-performance freeze report
+        run: cat forward_holdout/model_freeze_report.json
+
+      - name: Upload frozen protocol payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-future-holdout-freeze
+          path: |
+            forward_holdout/freeze_manifest.json
+            forward_holdout/model_freeze_report.json
+            forward_holdout/models/
+          if-no-files-found: error
