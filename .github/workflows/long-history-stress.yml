@@ -1,0 +1,90 @@
+name: Long-History Silver Stress Research
+
+on:
+  pull_request:
+    paths:
+      - "src/metal_predictor/local_archives.py"
+      - "src/metal_predictor/metastock_source.py"
+      - "src/metal_predictor/long_history.py"
+      - "src/metal_predictor/stress_contracts.py"
+      - "src/metal_predictor/stress_split.py"
+      - "src/metal_predictor/stress_statistics.py"
+      - "src/metal_predictor/stress_reporting.py"
+      - "src/metal_predictor/historical_stress.py"
+      - "build_long_history_dataset.py"
+      - "run_long_history_stress.py"
+      - "tests/test_long_history.py"
+      - ".github/workflows/long-history-stress.yml"
+      - "requirements*.txt"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: long-history-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  long-history-stress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up latest supported CPython
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements-long-history.txt
+
+      - name: Install latest stable compatible dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade --upgrade-strategy eager -r requirements-dev.txt
+          python -m pip install --upgrade --upgrade-strategy eager -r requirements-long-history.txt
+          python -m pip install -e .
+
+      - name: Record runtime versions
+        run: |
+          python --version
+          python - <<'PY'
+          import numpy, pandas, pyarrow, sklearn
+          print("numpy", numpy.__version__)
+          print("pandas", pandas.__version__)
+          print("pyarrow", pyarrow.__version__)
+          print("scikit-learn", sklearn.__version__)
+          PY
+
+      - name: Run long-history component and leakage tests
+        run: pytest tests/test_long_history.py tests/test_pipeline.py tests/test_model_training.py
+
+      - name: Download and build official HistData long history
+        run: |
+          python build_long_history_dataset.py \
+            --source histdata-download \
+            --start-utc 2009-05-03T22:00:00Z \
+            --end-utc 2026-08-07T21:00:00Z
+
+      - name: Run fixed-specification long-history stress suite
+        run: python run_long_history_stress.py
+
+      - name: Show build and stress decisions
+        run: |
+          cat data/long_history/long_history_build_report.json
+          cat data/long_history/stress/long_history_stress_report.json
+          cat data/long_history/stress/stress_artifact_manifest.json
+
+      - name: Upload reproducible long-history research artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: silver-long-history-stress-research
+          path: data/long_history/
+          if-no-files-found: error
+          retention-days: 90
