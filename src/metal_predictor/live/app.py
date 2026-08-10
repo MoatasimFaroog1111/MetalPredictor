@@ -12,6 +12,7 @@ from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
+from metal_predictor.live.catchup import LiveMarketCatchUpService
 from metal_predictor.live.contracts import HourlySilverBar
 from metal_predictor.live.inference import LiveForecastOrchestrator, LivePredictionEngine
 from metal_predictor.live.market_sources import TwelveDataSilverMinuteSource
@@ -72,13 +73,17 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         if config.market_source_enabled
         else None
     )
+    catchup = (
+        LiveMarketCatchUpService(source, repository, engine, orchestrator)
+        if source is not None
+        else None
+    )
     scheduler = (
         HourlyCollectionScheduler(
-            source,
-            orchestrator,
+            catchup,
             delay_minutes=config.collection_delay_minutes,
         )
-        if config.auto_collection_enabled and source is not None
+        if config.auto_collection_enabled and catchup is not None
         else None
     )
 
@@ -88,7 +93,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         if scheduler is not None:
             scheduler_task = asyncio.create_task(
                 scheduler.run_forever(),
-                name="silver-hourly-collection",
+                name="silver-hourly-catch-up",
             )
         try:
             yield
@@ -112,6 +117,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.orchestrator = orchestrator
     app.state.market_source = source
+    app.state.catchup = catchup
     app.state.telegram = notifier
     app.state.scheduler = scheduler
 
@@ -174,6 +180,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     @app.get("/api/v1/status")
     def status() -> dict[str, object]:
         latest = orchestrator.latest()
+        recent_bars = repository.recent_bars(limit=1)
         return {
             "service": "silver-ai-live",
             "model": engine.model_status(),
@@ -185,6 +192,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
             },
             "automatic_collection": {
                 "enabled": config.auto_collection_enabled,
+                "catch_up_enabled": catchup is not None,
                 "delay_minutes_after_hour": config.collection_delay_minutes,
             },
             "telegram": {
@@ -192,6 +200,9 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
                 "webhook_ready": config.telegram_webhook_enabled,
                 "allowed_chat_count": len(config.telegram_allowed_chat_ids),
             },
+            "latest_live_bar_timestamp_utc": (
+                recent_bars[-1].timestamp_utc.isoformat() if recent_bars else None
+            ),
             "latest_forecast_timestamp_utc": (
                 latest.feature_timestamp_utc.isoformat() if latest else None
             ),
@@ -237,10 +248,10 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         "/api/v1/admin/collect",
         dependencies=[Depends(require_admin)],
     )
-    def collect_market_hour(
+    def collect_market_through(
         hour_start_utc: datetime | None = None,
     ) -> dict[str, object]:
-        if source is None:
+        if catchup is None:
             raise HTTPException(
                 status_code=503,
                 detail="TWELVEDATA_API_KEY is not configured; automatic collection is disabled.",
@@ -249,16 +260,10 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         if target.tzinfo is None:
             raise HTTPException(status_code=422, detail="hour_start_utc must include a timezone.")
         try:
-            bar = source.fetch_completed_hour(target.astimezone(timezone.utc))
-            snapshot, bar_created, forecast_created = orchestrator.ingest_and_forecast(bar)
+            result = catchup.catch_up(target.astimezone(timezone.utc))
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return {
-            "bar_created": bar_created,
-            "forecast_created": forecast_created,
-            "bar": bar.as_dict(),
-            "forecast": snapshot.as_dict(),
-        }
+        return {"catch_up": result.as_dict()}
 
     @app.post(
         "/api/v1/admin/telegram/configure-webhook",
