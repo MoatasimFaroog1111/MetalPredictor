@@ -1,0 +1,45 @@
+name: Live Prediction Platform
+
+on:
+  pull_request:
+    paths:
+      - "src/metal_predictor/live/**"
+      - "live_web/**"
+      - "tests/test_live_platform.py"
+      - "requirements-live.txt"
+      - "run_live.py"
+      - "Dockerfile.live"
+      - ".github/workflows/live-platform.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements-live.txt
+      - name: Install live dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-live.txt
+          python -m pip install -e .
+      - name: Compile live package
+        run: python -m compileall -q src/metal_predictor/live run_live.py
+      - name: Run live platform tests
+        run: python -m pytest tests/test_live_platform.py
+
+  docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build production image
+        run: docker build -f Dockerfile.live -t metalpredictor-live:ci .
