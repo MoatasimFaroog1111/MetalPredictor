@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import math
 from pathlib import Path
 
@@ -11,6 +12,9 @@ import pandas as pd
 from metal_predictor.frozen_ridge import FrozenRidgeRegressor
 from metal_predictor.future_features import SilverFeatureAssembler
 from metal_predictor.live.contracts import ForecastSnapshot, HourlySilverBar
+
+
+logger = logging.getLogger(__name__)
 
 
 class LivePredictionEngine:
@@ -193,7 +197,7 @@ class LivePredictionEngine:
 
 
 class LiveForecastOrchestrator:
-    """Coordinates storage, frozen inference, and optional notification."""
+    """Coordinates storage, frozen inference, and optional best-effort notification."""
 
     def __init__(self, repository, engine: LivePredictionEngine, notifier=None) -> None:
         self._repository = repository
@@ -210,7 +214,13 @@ class LiveForecastOrchestrator:
         snapshot = self._engine.predict(bars)
         forecast_created = self._repository.put_forecast(snapshot)
         if forecast_created and self._notifier is not None:
-            self._notifier.publish_forecast(snapshot)
+            try:
+                self._notifier.publish_forecast(snapshot)
+            except Exception:
+                logger.exception(
+                    "Forecast persisted but optional notification delivery failed for %s",
+                    snapshot.feature_timestamp_utc.isoformat(),
+                )
         return snapshot, forecast_created
 
     def ingest_and_forecast(self, bar: HourlySilverBar) -> tuple[ForecastSnapshot, bool, bool]:
