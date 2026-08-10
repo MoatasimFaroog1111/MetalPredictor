@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d10" />
+  <meta name="description" content="Silver AI Forecast — research-only hourly silver forecasting dashboard" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <title>Silver AI Forecast</title>
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">Ag</div>
+        <div>
+          <h1>Silver AI Forecast</h1>
+          <p>توقع بحثي لسعر الفضة — الساعة القادمة</p>
+        </div>
+      </div>
+      <div class="status-pill" id="service-pill"><span></span><b>جاري الاتصال</b></div>
+    </header>
+
+    <section class="warning" role="note">
+      <strong>Research only</strong>
+      <span>الميزة التنبؤية لم تُثبت بعد. النظام لا يصدر إشارات BUY / SELL ولا ينفذ صفقات.</span>
+    </section>
+
+    <section class="hero-grid">
+      <article class="card price-card">
+        <div class="eyebrow">السعر الحالي</div>
+        <div class="price" id="current-price">—</div>
+        <div class="unit">USD / kg</div>
+        <div class="meta" id="feature-time">لا يوجد Forecast حي حتى الآن</div>
+      </article>
+
+      <article class="card forecast-card baseline">
+        <div class="card-head">
+          <div>
+            <div class="eyebrow">Baseline</div>
+            <h2 id="baseline-model">Ridge α=100</h2>
+          </div>
+          <div class="direction neutral" id="baseline-direction">—</div>
+        </div>
+        <div class="forecast-price" id="baseline-price">—</div>
+        <div class="metric-row"><span>العائد المتوقع 1h</span><b id="baseline-return">—</b></div>
+      </article>
+
+      <article class="card forecast-card challenger">
+        <div class="card-head">
+          <div>
+            <div class="eyebrow">Research Challenger</div>
+            <h2 id="challenger-model">Ridge α=10</h2>
+          </div>
+          <div class="direction neutral" id="challenger-direction">—</div>
+        </div>
+        <div class="forecast-price" id="challenger-price">—</div>
+        <div class="metric-row"><span>العائد المتوقع 1h</span><b id="challenger-return">—</b></div>
+      </article>
+    </section>
+
+    <section class="detail-grid">
+      <article class="card chart-card">
+        <div class="section-head">
+          <div><div class="eyebrow">Live History</div><h2>سجل التوقعات</h2></div>
+          <button id="refresh-btn" type="button">تحديث</button>
+        </div>
+        <div class="chart-wrap">
+          <svg id="price-chart" viewBox="0 0 800 250" role="img" aria-label="سجل السعر والتوقع"></svg>
+          <div class="empty-chart" id="empty-chart">سيظهر الرسم بعد تسجيل أول Forecast حي.</div>
+        </div>
+      </article>
+
+      <article class="card system-card">
+        <div class="eyebrow">System Integrity</div>
+        <h2>حالة النظام</h2>
+        <dl>
+          <div><dt>Edge</dt><dd id="edge-status">NOT_PROVEN</dd></div>
+          <div><dt>Features</dt><dd id="feature-count">52</dd></div>
+          <div><dt>Data Quality</dt><dd id="data-quality">—</dd></div>
+          <div><dt>Source</dt><dd id="source-provider">—</dd></div>
+          <div><dt>Feed Compatibility</dt><dd id="feed-compatibility">—</dd></div>
+          <div><dt>Telegram</dt><dd id="telegram-status">—</dd></div>
+        </dl>
+      </article>
+    </section>
+
+    <section class="card table-card">
+      <div class="section-head">
+        <div><div class="eyebrow">Audit Trail</div><h2>آخر التوقعات</h2></div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>الوقت UTC</th><th>السعر</th><th>Baseline</th><th>Research</th><th>الجودة</th></tr></thead>
+          <tbody id="history-body"><tr><td colspan="5" class="muted">لا توجد بيانات بعد.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <span>Silver AI Forecast • MetalPredictor</span>
+      <span id="last-refresh">—</span>
+    </footer>
+  </main>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
