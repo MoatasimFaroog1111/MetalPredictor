@@ -34,6 +34,11 @@ function applyForecast(data) {
 function applyStatus(data) {
   $('edge-status').textContent = data.model?.edge_status || 'NOT_PROVEN';
   $('feature-count').textContent = data.model?.feature_count ?? '52';
+  $('latest-live-bar').textContent = stamp(data.latest_live_bar_timestamp_utc);
+  const collector = data.automatic_collection || {};
+  $('catchup-status').textContent = collector.enabled
+    ? `AUTO • +${collector.delay_minutes_after_hour ?? 5}m`
+    : collector.catch_up_enabled ? 'MANUAL READY' : 'DISABLED';
   const tg = data.telegram || {};
   $('telegram-status').textContent = tg.notifications_enabled ? (tg.webhook_ready ? 'READY' : 'NOTIFY ONLY') : 'DISABLED';
 }
