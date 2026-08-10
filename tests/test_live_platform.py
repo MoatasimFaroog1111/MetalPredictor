@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 from pathlib import Path
 
 import httpx2 as httpx
@@ -13,7 +14,9 @@ from metal_predictor.live.app import create_app
 from metal_predictor.live.contracts import HourlySilverBar
 from metal_predictor.live.inference import LivePredictionEngine
 from metal_predictor.live.market_sources import TwelveDataSilverMinuteSource
+from metal_predictor.live.notifications import TelegramForecastPublisher
 from metal_predictor.live.repository import SQLiteForecastRepository
+from metal_predictor.live.scheduler import HourlyCollectionScheduler
 from metal_predictor.live.settings import LiveSettings
 
 
@@ -77,8 +80,15 @@ def test_fastapi_health_pwa_and_protected_manual_ingest(tmp_path: Path) -> None:
         admin_token="test-admin-token",
     )
     with TestClient(create_app(settings)) as client:
-        assert client.get("/api/v1/health").json()["buy_sell_enabled"] is False
-        assert client.get("/").status_code == 200
+        health = client.get("/api/v1/health")
+        assert health.json()["buy_sell_enabled"] is False
+        assert health.headers["cache-control"] == "no-store"
+
+        page = client.get("/")
+        assert page.status_code == 200
+        assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+        assert page.headers["x-frame-options"] == "DENY"
+
         sw = client.get("/sw.js")
         assert sw.status_code == 200
         assert sw.headers["service-worker-allowed"] == "/"
@@ -153,3 +163,40 @@ def test_twelvedata_adapter_aggregates_mocked_m1_to_full_h1() -> None:
     assert bar.source_provider == "TwelveData"
     assert bar.market_type == "spot_quote"
     assert bar.close_usd_per_kg > 2000
+
+
+def test_scheduler_uses_fixed_utc_delay_after_each_hour() -> None:
+    now = datetime(2026, 8, 10, 13, 4, 59, tzinfo=timezone.utc)
+    assert HourlyCollectionScheduler.next_due_utc(now, 5) == datetime(
+        2026, 8, 10, 13, 5, tzinfo=timezone.utc
+    )
+    now_after = datetime(2026, 8, 10, 13, 5, tzinfo=timezone.utc)
+    assert HourlyCollectionScheduler.next_due_utc(now_after, 5) == datetime(
+        2026, 8, 10, 14, 5, tzinfo=timezone.utc
+    )
+
+
+def test_telegram_webhook_configuration_requires_https_and_sends_secret() -> None:
+    observed: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["path"] = request.url.path
+        observed["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(200, json={"ok": True, "description": "Webhook was set"})
+
+    publisher = TelegramForecastPublisher(
+        "fake-bot-token",
+        ["12345"],
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ValueError, match="HTTPS"):
+        publisher.configure_webhook("http://silver.example", "secret-token")
+
+    result = publisher.configure_webhook("https://silver.example/", "secret-token")
+    assert result["configured"] is True
+    assert result["url"] == "https://silver.example/api/v1/telegram/webhook"
+    assert str(observed["path"]).endswith("/setWebhook")
+    sent = observed["json"]
+    assert isinstance(sent, dict)
+    assert sent["secret_token"] == "secret-token"
+    assert sent["allowed_updates"] == ["message"]
