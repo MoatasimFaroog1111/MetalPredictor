@@ -71,7 +71,7 @@ def test_hash_chain_ledger_detects_tampering(tmp_path: Path) -> None:
     result = ledger.append(rows)
     assert result.appended_rows == 2
     stored = pd.read_csv(path)
-    stored.loc[0, "value"] = "999"
+    stored.loc[0, "value"] = 999
     stored.to_csv(path, index=False)
     with pytest.raises(ValueError, match="row hash mismatch"):
         ledger.read_verified()
