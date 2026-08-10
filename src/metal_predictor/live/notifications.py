@@ -41,7 +41,7 @@ class TelegramForecastPublisher:
             "disable_web_page_preview": True,
         })
         if payload.get("ok") is not True:
-            raise RuntimeError(f"Telegram sendMessage failed: {payload}")
+            raise RuntimeError("Telegram sendMessage was rejected by the Bot API.")
 
     def configure_webhook(self, public_base_url: str, secret_token: str) -> dict[str, object]:
         base = public_base_url.strip().rstrip("/")
@@ -59,7 +59,7 @@ class TelegramForecastPublisher:
             "drop_pending_updates": False,
         })
         if payload.get("ok") is not True:
-            raise RuntimeError(f"Telegram setWebhook failed: {payload}")
+            raise RuntimeError("Telegram setWebhook was rejected by the Bot API.")
         return {
             "configured": True,
             "url": webhook_url,
@@ -67,11 +67,14 @@ class TelegramForecastPublisher:
         }
 
     def _post(self, method: str, payload: dict[str, object]) -> dict[str, object]:
-        response = self._client.post(
-            f"https://api.telegram.org/bot{self._token}/{method}",
-            json=payload,
-        )
-        response.raise_for_status()
+        try:
+            response = self._client.post(
+                f"https://api.telegram.org/bot{self._token}/{method}",
+                json=payload,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            raise RuntimeError(f"Telegram {method} transport request failed.") from None
         data = response.json()
         if not isinstance(data, dict):
             raise RuntimeError(f"Telegram {method} returned a non-object response.")
