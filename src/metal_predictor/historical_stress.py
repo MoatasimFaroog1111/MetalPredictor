@@ -72,6 +72,11 @@ class HistoricalStressEvaluator:
         )
         self._metrics = RegressionForecastMetrics()
 
+    @property
+    def config(self) -> HistoricalStressConfig:
+        """Read-only configuration contract shared with orchestration components."""
+        return self._config
+
     def evaluate(
         self,
         frame: pd.DataFrame,
@@ -411,7 +416,7 @@ class LongHistoryStressSuite:
         labeled: pd.DataFrame,
         feature_names: tuple[str, ...],
     ) -> tuple[dict[str, object], pd.DataFrame, pd.DataFrame]:
-        c = self._evaluator._config
+        c = self._evaluator.config
         enriched = self._annotate_target_quality(labeled, c)
         primary, primary_folds, primary_oof = self._evaluator.evaluate(
             enriched, feature_names, protocol="BASELINE_COMPATIBLE_ALL_USABLE_H1"
