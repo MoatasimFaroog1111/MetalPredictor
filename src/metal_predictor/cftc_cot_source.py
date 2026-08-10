@@ -35,9 +35,12 @@ class CftcDisaggregatedFuturesClient:
     """Official CFTC annual Disaggregated Futures-Only history adapter."""
 
     _URL = "https://www.cftc.gov/files/dea/history/fut_disagg_txt_{year}.zip"
+    _DATE_COLUMN_ALIASES = (
+        "As_of_Date_Form_YYYY-MM-DD",
+        "Report_Date_as_YYYY-MM-DD",
+    )
     _REQUIRED_SOURCE_COLUMNS = (
         "Market_and_Exchange_Names",
-        "As_of_Date_Form_YYYY-MM-DD",
         "CFTC_Contract_Market_Code",
         "Open_Interest_All",
         "Prod_Merc_Positions_Long_All",
@@ -75,7 +78,7 @@ class CftcDisaggregatedFuturesClient:
             raise ValueError("CFTC history contains no COMEX Silver rows for code 084691.")
 
         silver["report_date"] = pd.to_datetime(
-            silver["As_of_Date_Form_YYYY-MM-DD"], errors="raise"
+            silver["__report_date_source"], errors="raise"
         ).dt.normalize()
         silver = silver.loc[
             silver["report_date"].between(pd.Timestamp(start), pd.Timestamp(end))
@@ -92,7 +95,6 @@ class CftcDisaggregatedFuturesClient:
             column for column in self._REQUIRED_SOURCE_COLUMNS
             if column not in {
                 "Market_and_Exchange_Names",
-                "As_of_Date_Form_YYYY-MM-DD",
                 "CFTC_Contract_Market_Code",
             }
         ]
@@ -183,4 +185,14 @@ class CftcDisaggregatedFuturesClient:
                 f"CFTC {year} schema missing required columns: {sorted(missing)}; "
                 f"available={list(frame.columns)}"
             )
+        date_column = next(
+            (name for name in self._DATE_COLUMN_ALIASES if name in frame.columns),
+            None,
+        )
+        if date_column is None:
+            raise ValueError(
+                f"CFTC {year} schema has no supported report-date column; "
+                f"expected one of {self._DATE_COLUMN_ALIASES}."
+            )
+        frame["__report_date_source"] = frame[date_column]
         return frame
