@@ -1,7 +1,10 @@
 .env
+.env.live
+.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+runtime/
 data/raw/
 data/market/
 data/processed/
