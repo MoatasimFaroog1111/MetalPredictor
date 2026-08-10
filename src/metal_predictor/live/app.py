@@ -233,14 +233,27 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     )
     def ingest_hourly(payload: HourlyBarRequest) -> dict[str, object]:
         try:
-            snapshot, bar_created, forecast_created = orchestrator.ingest_and_forecast(
-                payload.to_contract()
-            )
+            bar = payload.to_contract()
+            bar_created = orchestrator.ingest_bar(bar)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        try:
+            snapshot, forecast_created = orchestrator.materialize_latest_forecast()
+        except ValueError as exc:
+            if str(exc).startswith("LIVE_FEATURES_INCOMPLETE"):
+                return {
+                    "bar_created": bar_created,
+                    "forecast_created": False,
+                    "forecast_status": "FEATURES_INCOMPLETE",
+                    "forecast": None,
+                }
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
         return {
             "bar_created": bar_created,
             "forecast_created": forecast_created,
+            "forecast_status": "MATERIALIZED" if forecast_created else "ALREADY_EXISTS",
             "forecast": snapshot.as_dict(),
         }
 
