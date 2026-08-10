@@ -9,6 +9,9 @@ on:
       - "requirements-live.txt"
       - "run_live.py"
       - "Dockerfile.live"
+      - ".env.live.example"
+      - ".gitignore"
+      - "LIVE_PLATFORM.md"
       - ".github/workflows/live-platform.yml"
   workflow_dispatch:
 
