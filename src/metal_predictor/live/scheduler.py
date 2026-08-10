@@ -3,31 +3,27 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 import logging
-
-from metal_predictor.live.contracts import MarketBarSource
-from metal_predictor.live.inference import LiveForecastOrchestrator
+from typing import Protocol
 
 
 logger = logging.getLogger(__name__)
 
 
-class HourlyCollectionScheduler:
-    """Single-process hourly collector with deterministic UTC scheduling.
+class CatchUpCollector(Protocol):
+    def catch_up(self, through_hour_utc: datetime) -> object: ...
 
-    The scheduler is deliberately independent of FastAPI. Duplicate executions are safe
-    because the repository/orchestrator enforce idempotency and revision rejection.
-    """
+
+class HourlyCollectionScheduler:
+    """Single-process UTC scheduler for the independently testable catch-up service."""
 
     def __init__(
         self,
-        source: MarketBarSource,
-        orchestrator: LiveForecastOrchestrator,
+        collector: CatchUpCollector,
         delay_minutes: int = 5,
     ) -> None:
         if not 1 <= int(delay_minutes) <= 30:
             raise ValueError("delay_minutes must be between 1 and 30.")
-        self._source = source
-        self._orchestrator = orchestrator
+        self._collector = collector
         self._delay_minutes = int(delay_minutes)
 
     async def run_forever(self) -> None:
@@ -45,14 +41,21 @@ class HourlyCollectionScheduler:
         now_utc: datetime | None = None,
     ) -> None:
         now = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
-        target = self._orchestrator.previous_completed_hour(now)
+        target = self.previous_completed_hour(now)
         try:
-            bar = await asyncio.to_thread(self._source.fetch_completed_hour, target)
-            await asyncio.to_thread(self._orchestrator.ingest_and_forecast, bar)
+            await asyncio.to_thread(self._collector.catch_up, target)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("Hourly live collection failed for %s", target.isoformat())
+            logger.exception("Hourly live catch-up failed through %s", target.isoformat())
+
+    @staticmethod
+    def previous_completed_hour(now_utc: datetime) -> datetime:
+        if now_utc.tzinfo is None:
+            raise ValueError("now_utc must be timezone-aware.")
+        now = now_utc.astimezone(timezone.utc)
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        return current_hour - timedelta(hours=1)
 
     @staticmethod
     def next_due_utc(now_utc: datetime, delay_minutes: int = 5) -> datetime:
