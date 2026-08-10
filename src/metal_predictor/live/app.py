@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 import secrets
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +17,7 @@ from metal_predictor.live.inference import LiveForecastOrchestrator, LivePredict
 from metal_predictor.live.market_sources import TwelveDataSilverMinuteSource
 from metal_predictor.live.notifications import TelegramForecastPublisher
 from metal_predictor.live.repository import SQLiteForecastRepository
+from metal_predictor.live.scheduler import HourlyCollectionScheduler
 from metal_predictor.live.settings import LiveSettings
 
 
@@ -69,6 +72,31 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         if config.market_source_enabled
         else None
     )
+    scheduler = (
+        HourlyCollectionScheduler(
+            source,
+            orchestrator,
+            delay_minutes=config.collection_delay_minutes,
+        )
+        if config.auto_collection_enabled and source is not None
+        else None
+    )
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        scheduler_task: asyncio.Task[None] | None = None
+        if scheduler is not None:
+            scheduler_task = asyncio.create_task(
+                scheduler.run_forever(),
+                name="silver-hourly-collection",
+            )
+        try:
+            yield
+        finally:
+            if scheduler_task is not None:
+                scheduler_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await scheduler_task
 
     app = FastAPI(
         title="Silver AI Forecast API",
@@ -77,6 +105,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
             "Operational research-only XAG/USD hourly forecasts using frozen causal models. "
             "BUY/SELL execution is intentionally disabled because predictive edge is not proven."
         ),
+        lifespan=lifespan,
     )
     app.state.settings = config
     app.state.repository = repository
@@ -84,11 +113,31 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     app.state.orchestrator = orchestrator
     app.state.market_source = source
     app.state.telegram = notifier
+    app.state.scheduler = scheduler
 
     static_dir = root / "live_web"
     if not static_dir.exists():
         raise FileNotFoundError(f"Live web directory not found: {static_dir}")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        path = request.url.path
+        if path == "/" or path == "/sw.js" or path.startswith("/static/"):
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self'; style-src 'self'; "
+                "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+                "base-uri 'none'; frame-ancestors 'none'; manifest-src 'self'; worker-src 'self'"
+            )
+        if path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     admin_header = APIKeyHeader(name="X-Admin-Token", auto_error=False)
 
@@ -134,6 +183,10 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
                 "symbol": config.twelvedata_symbol if config.market_source_enabled else None,
                 "mode": "M1_TO_H1_CONSERVATIVE_AGGREGATION" if config.market_source_enabled else None,
             },
+            "automatic_collection": {
+                "enabled": config.auto_collection_enabled,
+                "delay_minutes_after_hour": config.collection_delay_minutes,
+            },
             "telegram": {
                 "notifications_enabled": config.telegram_enabled,
                 "webhook_ready": config.telegram_webhook_enabled,
@@ -142,7 +195,6 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
             "latest_forecast_timestamp_utc": (
                 latest.feature_timestamp_utc.isoformat() if latest else None
             ),
-            "database_path": str(db_path),
         }
 
     @app.get("/api/v1/model/status")
@@ -205,6 +257,26 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
             "bar": bar.as_dict(),
             "forecast": snapshot.as_dict(),
         }
+
+    @app.post("/api/v1/admin/telegram/configure-webhook")
+    def configure_telegram_webhook(
+        _: Annotated[None, Depends(require_admin)],
+    ) -> dict[str, object]:
+        if notifier is None or not config.telegram_webhook_enabled:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Telegram requires TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_CHAT_IDS, "
+                    "TELEGRAM_WEBHOOK_SECRET, and PUBLIC_BASE_URL."
+                ),
+            )
+        try:
+            return notifier.configure_webhook(
+                config.public_base_url,
+                config.telegram_webhook_secret,
+            )
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/api/v1/telegram/webhook", include_in_schema=False)
     def telegram_webhook(
