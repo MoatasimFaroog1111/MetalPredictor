@@ -23,6 +23,12 @@ Use `Dockerfile.live`. The image contains the frozen model payloads, frozen hist
 
 Persist `/data` when running the container. The default production database is `/data/live_predictions.sqlite3`.
 
+### v1 scaling boundary
+
+Run **exactly one application replica/process** for v1. SQLite and the in-process hourly scheduler are deliberately a single-instance deployment design. The Docker command starts one Uvicorn process.
+
+Do not horizontally scale this image by adding replicas. When scale-out is required, keep the same API/inference contracts but replace `SQLiteForecastRepository` with a shared PostgreSQL implementation and move hourly scheduling to a single external scheduler/worker. This prevents duplicate collectors and split-brain local databases.
+
 ## Environment variables
 
 Never commit real values. Store them in the hosting platform's secret manager.
@@ -93,7 +99,7 @@ POST /api/v1/market/silver/hourly
 X-Admin-Token: <LIVE_ADMIN_TOKEN>
 ```
 
-The request is idempotent. Re-sending the identical bar is accepted without duplicating it. Re-sending a changed bar at the same timestamp raises a revision conflict rather than silently rewriting history. If earlier context is missing, the bar can still be persisted but forecast materialization fails closed until the causal 52-feature vector is complete.
+The request is idempotent. Re-sending the identical bar is accepted without duplicating it. Re-sending a changed bar at the same timestamp raises a revision conflict rather than silently rewriting history. If earlier context is missing, the valid bar remains persisted and the response reports `forecast_status=FEATURES_INCOMPLETE` until the causal 52-feature vector becomes complete.
 
 ## Telegram
 
@@ -127,7 +133,7 @@ Supported bot commands:
 - `/status` — service/model status
 - `/start` or `/help` — command help
 
-Newly materialized forecasts are also pushed to the allowlisted chats when Telegram notifications are enabled.
+Newly materialized forecasts are pushed to the allowlisted chats when Telegram notifications are enabled. Notification delivery is best-effort: a temporary Telegram outage does not undo or invalidate an already persisted forecast.
 
 ## Main API
 
