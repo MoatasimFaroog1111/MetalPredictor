@@ -37,27 +37,29 @@ class TwelveDataSilverMinuteSource:
     def fetch_completed_hour(self, hour_start_utc: datetime) -> HourlySilverBar:
         start = self._hour_start(hour_start_utc)
         end = start + timedelta(minutes=59, seconds=59)
-        response = self._client.get(
-            self._URL,
-            params={
-                "symbol": self._symbol,
-                "interval": "1min",
-                "start_date": start.strftime("%Y-%m-%dT%H:%M:%S"),
-                "end_date": end.strftime("%Y-%m-%dT%H:%M:%S"),
-                "timezone": "UTC",
-                "order": "asc",
-                "outputsize": 60,
-                "format": "JSON",
-                "apikey": self._api_key,
-            },
-        )
-        response.raise_for_status()
+        try:
+            response = self._client.get(
+                self._URL,
+                params={
+                    "symbol": self._symbol,
+                    "interval": "1min",
+                    "start_date": start.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "end_date": end.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "timezone": "UTC",
+                    "order": "asc",
+                    "outputsize": 60,
+                    "format": "JSON",
+                    "apikey": self._api_key,
+                },
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            raise RuntimeError("Twelve Data transport request failed.") from None
+
         payload = response.json()
         if payload.get("status") == "error":
-            raise RuntimeError(
-                f"Twelve Data error {payload.get('code', 'unknown')}: "
-                f"{payload.get('message', 'unknown error')}"
-            )
+            code = str(payload.get("code", "unknown"))
+            raise RuntimeError(f"Twelve Data API rejected the request with code {code}.")
         values = payload.get("values")
         if not isinstance(values, list) or not values:
             raise RuntimeError("Twelve Data returned no XAG/USD minute bars for completed hour.")
