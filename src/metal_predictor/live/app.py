@@ -216,11 +216,11 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     def recent_market(limit: Annotated[int, Query(ge=1, le=1000)] = 168) -> list[dict[str, object]]:
         return [item.as_dict() for item in repository.recent_bars(limit=limit)]
 
-    @app.post("/api/v1/market/silver/hourly")
-    def ingest_hourly(
-        payload: HourlyBarRequest,
-        _: Annotated[None, Depends(require_admin)],
-    ) -> dict[str, object]:
+    @app.post(
+        "/api/v1/market/silver/hourly",
+        dependencies=[Depends(require_admin)],
+    )
+    def ingest_hourly(payload: HourlyBarRequest) -> dict[str, object]:
         try:
             snapshot, bar_created, forecast_created = orchestrator.ingest_and_forecast(
                 payload.to_contract()
@@ -233,9 +233,11 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
             "forecast": snapshot.as_dict(),
         }
 
-    @app.post("/api/v1/admin/collect")
+    @app.post(
+        "/api/v1/admin/collect",
+        dependencies=[Depends(require_admin)],
+    )
     def collect_market_hour(
-        _: Annotated[None, Depends(require_admin)],
         hour_start_utc: datetime | None = None,
     ) -> dict[str, object]:
         if source is None:
@@ -258,10 +260,11 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
             "forecast": snapshot.as_dict(),
         }
 
-    @app.post("/api/v1/admin/telegram/configure-webhook")
-    def configure_telegram_webhook(
-        _: Annotated[None, Depends(require_admin)],
-    ) -> dict[str, object]:
+    @app.post(
+        "/api/v1/admin/telegram/configure-webhook",
+        dependencies=[Depends(require_admin)],
+    )
+    def configure_telegram_webhook() -> dict[str, object]:
         if notifier is None or not config.telegram_webhook_enabled:
             raise HTTPException(
                 status_code=503,
