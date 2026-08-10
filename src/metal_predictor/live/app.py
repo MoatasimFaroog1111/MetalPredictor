@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 import secrets
 from typing import Annotated, Any
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -102,6 +101,14 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     def dashboard() -> FileResponse:
         return FileResponse(static_dir / "index.html")
 
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker() -> FileResponse:
+        return FileResponse(
+            static_dir / "sw.js",
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+        )
+
     @app.get("/api/v1/health")
     def health() -> dict[str, object]:
         return {
@@ -156,7 +163,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     @app.post("/api/v1/market/silver/hourly")
     def ingest_hourly(
         payload: HourlyBarRequest,
-        _: Annotated[None, require_admin],
+        _: Annotated[None, Depends(require_admin)],
     ) -> dict[str, object]:
         try:
             snapshot, bar_created, forecast_created = orchestrator.ingest_and_forecast(
@@ -172,7 +179,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
 
     @app.post("/api/v1/admin/collect")
     def collect_market_hour(
-        _: Annotated[None, require_admin],
+        _: Annotated[None, Depends(require_admin)],
         hour_start_utc: datetime | None = None,
     ) -> dict[str, object]:
         if source is None:
@@ -197,11 +204,9 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
 
     @app.post("/api/v1/telegram/webhook", include_in_schema=False)
     def telegram_webhook(
-        request: Request,
         update: dict[str, Any],
         x_telegram_bot_api_secret_token: Annotated[str | None, Header()] = None,
     ) -> dict[str, bool]:
-        del request
         if notifier is None or not config.telegram_webhook_secret:
             raise HTTPException(status_code=503, detail="Telegram webhook is not configured.")
         supplied = x_telegram_bot_api_secret_token or ""
