@@ -142,7 +142,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     admin_header = APIKeyHeader(name="X-Admin-Token", auto_error=False)
 
     def require_admin(
-        supplied: Annotated[str | None, Depends(admin_header)],
+        supplied: str | None = Depends(admin_header),
     ) -> None:
         expected = config.admin_token
         if not expected:
