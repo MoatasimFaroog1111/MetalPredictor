@@ -6,8 +6,10 @@ on:
       - "src/metal_predictor/local_archives.py"
       - "src/metal_predictor/metastock_source.py"
       - "src/metal_predictor/long_history.py"
+      - "src/metal_predictor/stress_contracts.py"
       - "src/metal_predictor/stress_split.py"
       - "src/metal_predictor/stress_statistics.py"
+      - "src/metal_predictor/stress_reporting.py"
       - "src/metal_predictor/historical_stress.py"
       - "build_long_history_dataset.py"
       - "run_long_history_stress.py"
@@ -19,6 +21,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: long-history-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   long-history-stress:
@@ -73,6 +79,7 @@ jobs:
         run: |
           cat data/long_history/long_history_build_report.json
           cat data/long_history/stress/long_history_stress_report.json
+          cat data/long_history/stress/stress_artifact_manifest.json
 
       - name: Upload reproducible long-history research artifacts
         uses: actions/upload-artifact@v5
