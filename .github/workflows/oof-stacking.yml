@@ -1,0 +1,53 @@
+name: OOF Stacking Ensemble Research
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oof-stacking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run stacking and leakage tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_oof_stacking.py
+
+      - name: Build leakage-safe silver development data
+        run: python build_training_dataset.py
+
+      - name: Run nested OOF stacking research
+        run: python run_oof_stacking.py
+
+      - name: Show stacking report
+        run: cat artifacts/oof_stacking/stacking_report.json
+
+      - name: Upload stacking artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-oof-stacking-research
+          path: artifacts/oof_stacking/
+          if-no-files-found: error
