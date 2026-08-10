@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "development_rows": 22809,
+  "feature_count": 52,
+  "training_first_timestamp_utc": "2021-08-09T00:00:00+00:00",
+  "training_last_timestamp_utc": "2025-11-11T12:00:00+00:00",
+  "historical_test_loaded": false,
+  "models": {
+    "primary": {
+      "name": "ridge_alpha_10",
+      "path": "forward_holdout/models/ridge_alpha_10.json",
+      "payload_sha256": "26f8427623accb0e55e7c9cd784a5b47fcb9143fe3124de0d604133b83dc8d79",
+      "alpha": 10.0
+    },
+    "benchmark": {
+      "name": "ridge_alpha_100",
+      "path": "forward_holdout/models/ridge_alpha_100.json",
+      "payload_sha256": "91446fd0868b3ac9ad1d75e318666d6bbc7a7ab4ea14b65849684d66a22c6585",
+      "alpha": 100.0
+    }
+  },
+  "max_prediction_equivalence_error": {
+    "ridge_alpha_10": 0.0,
+    "ridge_alpha_100": 0.0
+  },
+  "performance_metrics_computed": false
+}
