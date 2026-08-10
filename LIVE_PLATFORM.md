@@ -32,7 +32,7 @@ Never commit real values. Store them in the hosting platform's secret manager.
 | `LIVE_ADMIN_TOKEN` | Yes for writes/admin | Protects ingestion and admin endpoints |
 | `TWELVEDATA_API_KEY` | Only for automatic market collection | XAG/USD M1 operational feed |
 | `TWELVEDATA_SYMBOL` | No | Defaults to `XAG/USD` |
-| `LIVE_AUTO_COLLECT` | No | Set `true` to run the internal hourly collector |
+| `LIVE_AUTO_COLLECT` | No | Set `true` to run the internal hourly catch-up/collector |
 | `LIVE_COLLECTION_DELAY_MINUTES` | No | Minutes after each UTC hour before collection; default `5` |
 | `TELEGRAM_BOT_TOKEN` | Only for Telegram | Bot token from BotFather |
 | `TELEGRAM_WEBHOOK_SECRET` | Only for Telegram commands | Secret checked on Telegram webhook requests |
@@ -53,7 +53,7 @@ python run_live.py
 
 Open `http://localhost:8000/` for the PWA and `/docs` for the API schema.
 
-## Automatic hourly forecasts
+## Automatic hourly forecasts and startup catch-up
 
 With these secrets configured:
 
@@ -63,20 +63,37 @@ LIVE_AUTO_COLLECT=true
 LIVE_COLLECTION_DELAY_MINUTES=5
 ```
 
-the service fetches the previous completed UTC hour after the configured delay. Twelve Data M1 rows are passed through the existing `ConservativeH1Aggregator`, so duplicate/conflicting/invalid minute behavior follows the same conservative aggregation policy used elsewhere in the project.
+the service runs at the configured minute after each UTC hour. Before trying to forecast, it detects the latest H1 bar already persisted and requests every missing completed hour from that point through the previous completed hour.
+
+The frozen historical feature context currently ends before the live service starts. Therefore startup catch-up is mandatory for causal continuity: the service **does not** jump from the frozen history directly to today's latest hour.
+
+Twelve Data M1 catch-up is requested in bounded blocks of at most 72 hours. At one-minute resolution this is at most 4,320 possible data points per request, below the provider's documented 5,000-point ceiling. `start_date` and `end_date` bound each request; the returned M1 rows then pass through the existing `ConservativeH1Aggregator`.
+
+Backfilled H1 bars are feature context only. The service deliberately does **not** manufacture retroactive “live forecasts” for all missing historical hours. After catch-up, only the requested latest completed hour may materialize a forecast. This keeps the live forecast history auditable.
+
+Market closures and source gaps are not forward-filled. If the requested latest hour does not exist, no forecast is created. If the exact frozen 52-feature vector is incomplete, inference fails closed with `LIVE_FEATURES_INCOMPLETE` and waits for a later eligible hour rather than imputing data.
 
 The Twelve Data feed is explicitly marked as an operational cross-feed. It is **not assumed identical** to the HistData spot-bid training feed, so forecasts produced from it expose `source_compatible_with_training=false`.
 
+A protected manual catch-up trigger is available after deployment:
+
+```text
+POST /api/v1/admin/collect
+X-Admin-Token: <LIVE_ADMIN_TOKEN>
+```
+
+With no timestamp it catches up through the previous completed UTC hour. An explicit timezone-aware `hour_start_utc` can be supplied to cap the catch-up at an earlier hour.
+
 ## Manual H1 ingestion
 
-Automatic collection is optional. A trusted upstream source can send a completed H1 bar to:
+Automatic collection is optional. A trusted upstream source can send completed H1 bars sequentially to:
 
 ```text
 POST /api/v1/market/silver/hourly
 X-Admin-Token: <LIVE_ADMIN_TOKEN>
 ```
 
-The request is idempotent. Re-sending the identical bar is accepted without duplicating it. Re-sending a changed bar at the same timestamp raises a revision conflict rather than silently rewriting history.
+The request is idempotent. Re-sending the identical bar is accepted without duplicating it. Re-sending a changed bar at the same timestamp raises a revision conflict rather than silently rewriting history. If earlier context is missing, the bar can still be persisted but forecast materialization fails closed until the causal 52-feature vector is complete.
 
 ## Telegram
 
