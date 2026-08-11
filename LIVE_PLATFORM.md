@@ -77,7 +77,7 @@ Twelve Data M1 catch-up is requested in bounded blocks of at most 72 hours. At o
 
 Backfilled H1 bars are feature context only. The service deliberately does **not** manufacture retroactive “live forecasts” for all missing historical hours. After catch-up, only the requested latest completed hour may materialize a forecast. This keeps the live forecast history auditable.
 
-Market closures and source gaps are not forward-filled. If the requested latest hour does not exist, no forecast is created. If the exact frozen 52-feature vector is incomplete, inference fails closed with `LIVE_FEATURES_INCOMPLETE` and waits for a later eligible hour rather than imputing data.
+Market closures and source gaps are never forward-filled. Exact-clock lag features can therefore be `NaN` after normal market closures or missing exact timestamps. This is intentional and matches training: the sealed frozen Ridge payload reproduces the fitted median imputer and missing-value indicators. Live inference preserves those `NaN` values and rejects infinite feature values; it does not invent prices or interpolate exact-clock history. If the requested latest H1 bar itself is unavailable, no forecast is created.
 
 The Twelve Data feed is explicitly marked as an operational cross-feed. It is **not assumed identical** to the HistData spot-bid training feed, so forecasts produced from it expose `source_compatible_with_training=false`.
 
@@ -99,7 +99,7 @@ POST /api/v1/market/silver/hourly
 X-Admin-Token: <LIVE_ADMIN_TOKEN>
 ```
 
-The request is idempotent. Re-sending the identical bar is accepted without duplicating it. Re-sending a changed bar at the same timestamp raises a revision conflict rather than silently rewriting history. If earlier context is missing, the valid bar remains persisted and the response reports `forecast_status=FEATURES_INCOMPLETE` until the causal 52-feature vector becomes complete.
+The request is idempotent. Re-sending the identical bar is accepted without duplicating it. Re-sending a changed bar at the same timestamp raises a revision conflict rather than silently rewriting history. Expected missing exact-clock lag features are handled only by the frozen model's sealed training-time imputer; the service never forward-fills them.
 
 ## Telegram
 
