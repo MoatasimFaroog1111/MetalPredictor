@@ -84,20 +84,7 @@ class LiveMarketCatchUpService:
                 status="LATEST_HOUR_NOT_AVAILABLE",
             )
 
-        try:
-            snapshot, forecast_created = self._orchestrator.materialize_latest_forecast()
-        except ValueError as exc:
-            if str(exc).startswith("LIVE_FEATURES_INCOMPLETE"):
-                return LiveCatchUpResult(
-                    requested_start_utc=start,
-                    requested_end_utc=through,
-                    fetched_bars=len(bars),
-                    created_bars=created,
-                    forecast_created=False,
-                    forecast_timestamp_utc=None,
-                    status="LATEST_FEATURES_INCOMPLETE",
-                )
-            raise
+        snapshot, forecast_created = self._orchestrator.materialize_latest_forecast()
 
         return LiveCatchUpResult(
             requested_start_utc=start,
