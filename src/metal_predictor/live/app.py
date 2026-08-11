@@ -235,19 +235,8 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         try:
             bar = payload.to_contract()
             bar_created = orchestrator.ingest_bar(bar)
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-        try:
             snapshot, forecast_created = orchestrator.materialize_latest_forecast()
         except ValueError as exc:
-            if str(exc).startswith("LIVE_FEATURES_INCOMPLETE"):
-                return {
-                    "bar_created": bar_created,
-                    "forecast_created": False,
-                    "forecast_status": "FEATURES_INCOMPLETE",
-                    "forecast": None,
-                }
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
         return {
