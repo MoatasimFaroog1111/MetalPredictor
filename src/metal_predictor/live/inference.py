@@ -91,7 +91,7 @@ class LivePredictionEngine:
         row = featured.loc[featured["timestamp_utc"].eq(newest)]
         if len(row) != 1:
             raise ValueError("Could not resolve exactly one feature row for latest live hour.")
-        self._require_complete_features(row, newest)
+        self._validate_feature_values(row, newest)
 
         baseline_return = float(self._baseline.predict(row)[0])
         challenger_return = float(self._challenger.predict(row)[0])
@@ -134,26 +134,26 @@ class LivePredictionEngine:
             "buy_sell_enabled": False,
         }
 
-    def _require_complete_features(
+    def _validate_feature_values(
         self,
         row: pd.DataFrame,
         newest: pd.Timestamp,
     ) -> None:
-        feature_frame = row.loc[:, self._baseline.feature_names]
-        numeric = feature_frame.apply(pd.to_numeric, errors="coerce")
-        values = numeric.to_numpy(dtype=float)
-        if np.isfinite(values).all():
-            return
-        missing = [
-            name
-            for name in self._baseline.feature_names
-            if not np.isfinite(float(numeric[name].iloc[0]))
-        ]
-        preview = ", ".join(missing[:8])
-        suffix = "..." if len(missing) > 8 else ""
-        raise ValueError(
-            f"LIVE_FEATURES_INCOMPLETE {newest.isoformat()} missing={preview}{suffix}"
+        """Preserve the frozen training-time missing-value contract.
+
+        Exact-clock lag features are intentionally NaN around market closures and data gaps.
+        FrozenRidgeRegressor reproduces the training-time median imputer and missing-value
+        indicators, so those NaNs must not be forward-filled or rejected here. Infinite
+        values remain invalid and fail closed.
+        """
+        numeric = row.loc[:, self._baseline.feature_names].apply(
+            pd.to_numeric, errors="coerce"
         )
+        values = numeric.to_numpy(dtype=float)
+        if np.isinf(values).any():
+            raise ValueError(
+                f"LIVE_FEATURES_INVALID_INFINITE {newest.isoformat()}"
+            )
 
     @staticmethod
     def _direction(value: float) -> str:
