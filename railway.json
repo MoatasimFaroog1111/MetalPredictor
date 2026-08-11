@@ -1,0 +1,31 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile.live",
+    "watchPatterns": [
+      "/src/metal_predictor/live/**",
+      "/src/metal_predictor/frozen_ridge.py",
+      "/src/metal_predictor/future_features.py",
+      "/src/metal_predictor/features.py",
+      "/src/metal_predictor/core.py",
+      "/src/metal_predictor/data.py",
+      "/src/metal_predictor/market_aggregation.py",
+      "/src/metal_predictor/market_source.py",
+      "/live_web/**",
+      "/run_live.py",
+      "/requirements-live.txt",
+      "/Dockerfile.live",
+      "/railway.json",
+      "/forward_holdout/freeze_manifest.json",
+      "/forward_holdout/models/**",
+      "/XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet"
+    ]
+  },
+  "deploy": {
+    "healthcheckPath": "/api/v1/health",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
