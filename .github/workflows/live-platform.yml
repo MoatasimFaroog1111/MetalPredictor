@@ -9,10 +9,31 @@ on:
       - "tests/test_live_market_gap.py"
       - "requirements-live.txt"
       - "run_live.py"
+      - "docker_entrypoint_live.py"
       - "Dockerfile.live"
+      - "railway.json"
       - ".env.live.example"
       - ".gitignore"
       - "LIVE_PLATFORM.md"
+      - "RAILWAY_DEPLOYMENT.md"
+      - ".github/workflows/live-platform.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/metal_predictor/live/**"
+      - "live_web/**"
+      - "tests/test_live_platform.py"
+      - "tests/test_live_market_gap.py"
+      - "requirements-live.txt"
+      - "run_live.py"
+      - "docker_entrypoint_live.py"
+      - "Dockerfile.live"
+      - "railway.json"
+      - ".env.live.example"
+      - ".gitignore"
+      - "LIVE_PLATFORM.md"
+      - "RAILWAY_DEPLOYMENT.md"
       - ".github/workflows/live-platform.yml"
   workflow_dispatch:
 
@@ -40,7 +61,7 @@ jobs:
           python -m pip install -r requirements-live.txt
           python -m pip install -e .
       - name: Compile live package
-        run: python -m compileall -q src/metal_predictor/live run_live.py
+        run: python -m compileall -q src/metal_predictor/live run_live.py docker_entrypoint_live.py
       - name: Run live platform tests
         run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py
 
@@ -51,3 +72,40 @@ jobs:
       - uses: actions/checkout@v6
       - name: Build production image
         run: docker build -f Dockerfile.live -t metalpredictor-live:ci .
+      - name: Smoke-test production image with persistent volume
+        run: |
+          set -euo pipefail
+          docker volume create metalpredictor-ci-data >/dev/null
+          docker run -d \
+            --name metalpredictor-live-ci \
+            -e LIVE_ADMIN_TOKEN=ci-admin-token \
+            -e LIVE_AUTO_COLLECT=false \
+            -v metalpredictor-ci-data:/data \
+            -p 18000:8000 \
+            metalpredictor-live:ci >/dev/null
+          cleanup() {
+            docker logs metalpredictor-live-ci || true
+            docker rm -f metalpredictor-live-ci >/dev/null 2>&1 || true
+            docker volume rm metalpredictor-ci-data >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:18000/api/v1/health > health.json; then
+              break
+            fi
+            sleep 1
+          done
+          test -s health.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("health.json").read_text())
+          assert payload["status"] == "ok"
+          assert payload["edge_status"] == "NOT_PROVEN"
+          assert payload["buy_sell_enabled"] is False
+          PY
+
+          test "$(docker exec metalpredictor-live-ci sh -c "awk '/^Uid:/{print \$2}' /proc/1/status")" = "10001"
+          docker exec --user 10001 metalpredictor-live-ci python -c "from pathlib import Path; p=Path('/data/ci-write-probe'); p.write_text('ok'); assert p.read_text() == 'ok'; p.unlink()"
