@@ -29,6 +29,8 @@ The Docker image defaults the SQLite database to:
 /data/live_predictions.sqlite3
 ```
 
+The container starts with only the privileges needed to prepare ownership of the mounted runtime directory, then immediately drops to `appuser` (UID `10001`) before starting FastAPI. Do **not** set `RAILWAY_RUN_UID=0`; the application process is intentionally non-root. The volume/privilege-drop path is covered by the sanitized public Docker CI mirror.
+
 ## Required variables
 
 Set real values only in Railway Variables/Secrets; never commit them:
