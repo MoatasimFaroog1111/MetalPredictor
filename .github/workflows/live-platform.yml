@@ -7,6 +7,7 @@ on:
       - "live_web/**"
       - "tests/test_live_platform.py"
       - "tests/test_live_market_gap.py"
+      - "tests/test_gold_api_live_source.py"
       - "requirements-live.txt"
       - "run_live.py"
       - "docker_entrypoint_live.py"
@@ -25,6 +26,7 @@ on:
       - "live_web/**"
       - "tests/test_live_platform.py"
       - "tests/test_live_market_gap.py"
+      - "tests/test_gold_api_live_source.py"
       - "requirements-live.txt"
       - "run_live.py"
       - "docker_entrypoint_live.py"
@@ -63,7 +65,7 @@ jobs:
       - name: Compile live package
         run: python -m compileall -q src/metal_predictor/live run_live.py docker_entrypoint_live.py
       - name: Run live platform tests
-        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py
+        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py
 
   docker:
     runs-on: ubuntu-24.04
