@@ -1,5 +1,13 @@
-const CACHE = 'silver-ai-shell-v2';
-const SHELL = ['/', '/static/styles.css', '/static/app.js', '/static/manifest.webmanifest', '/static/icon.svg'];
+const CACHE = 'silver-ai-shell-v3';
+const SHELL = [
+  '/',
+  '/static/styles.css',
+  '/static/app.js',
+  '/static/components/spread-profit-simulator.js',
+  '/static/components/spread-profit-simulator.css',
+  '/static/manifest.webmanifest',
+  '/static/icon.svg',
+];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
