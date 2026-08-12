@@ -38,6 +38,11 @@ class LiveSettings:
     bullionvault_market_width: int = 5
     bullionvault_minimum_quantity_kg: float = 0.001
     bullionvault_public_fallback: bool = True
+    bullionvault_microstructure_enabled: bool = False
+    bullionvault_microstructure_interval_seconds: int = 60
+    bullionvault_microstructure_database_path: Path = Path(
+        "runtime/bullionvault_microstructure.sqlite3"
+    )
     telegram_bot_token: str = ""
     telegram_webhook_secret: str = ""
     telegram_allowed_chat_ids: tuple[str, ...] = ()
@@ -91,6 +96,10 @@ class LiveSettings:
             or float(self.bullionvault_minimum_quantity_kg) <= 0
         ):
             raise ValueError("BULLIONVAULT_MINIMUM_QUANTITY_KG must be finite and positive.")
+        if not 30 <= int(self.bullionvault_microstructure_interval_seconds) <= 3600:
+            raise ValueError(
+                "BULLIONVAULT_MICROSTRUCTURE_INTERVAL_SECONDS must be between 30 and 3600."
+            )
 
     @classmethod
     def from_environment(cls, repository_root: Path | None = None) -> "LiveSettings":
@@ -130,6 +139,18 @@ class LiveSettings:
             bullionvault_public_fallback=_environment_bool(
                 "BULLIONVAULT_PUBLIC_FALLBACK", True
             ),
+            bullionvault_microstructure_enabled=_environment_bool(
+                "BULLIONVAULT_MICROSTRUCTURE_ENABLED", False
+            ),
+            bullionvault_microstructure_interval_seconds=int(
+                os.getenv("BULLIONVAULT_MICROSTRUCTURE_INTERVAL_SECONDS", "60")
+            ),
+            bullionvault_microstructure_database_path=Path(
+                os.getenv(
+                    "BULLIONVAULT_MICROSTRUCTURE_DB_PATH",
+                    "runtime/bullionvault_microstructure.sqlite3",
+                )
+            ).expanduser(),
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
             telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip(),
             telegram_allowed_chat_ids=allowed,

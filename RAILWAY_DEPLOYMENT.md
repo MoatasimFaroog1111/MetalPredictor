@@ -23,13 +23,21 @@ Attach a persistent Railway Volume at:
 /data
 ```
 
-The Docker image defaults the SQLite database to:
+The Docker image defaults the live forecast SQLite database to:
 
 ```text
 /data/live_predictions.sqlite3
 ```
 
-The container starts with only the privileges needed to prepare ownership of the mounted runtime directory, then immediately drops to `appuser` (UID `10001`) before starting FastAPI. Do **not** set `RAILWAY_RUN_UID=0`; the application process is intentionally non-root. The volume/privilege-drop path is covered by the sanitized public Docker CI mirror.
+When the BullionVault microstructure research collector is enabled, keep its append-only database on the same persistent volume but in a **separate SQLite file**:
+
+```text
+/data/bullionvault_microstructure.sqlite3
+```
+
+This separation is intentional: order-book research data cannot modify the frozen live-forecast database, frozen 52-feature graph, or future-holdout ledgers.
+
+The container starts with only the privileges needed to prepare ownership of the mounted runtime directory and both SQLite paths, then immediately drops to `appuser` (UID `10001`) before starting FastAPI. Do **not** set `RAILWAY_RUN_UID=0`; the application process is intentionally non-root. The volume/privilege-drop path is covered by the sanitized public Docker CI mirror.
 
 ## Required variables
 
@@ -52,6 +60,43 @@ Optional Twelve Data fallback:
 ```text
 TWELVEDATA_API_KEY=<secret>
 TWELVEDATA_SYMBOL=XAG/USD
+```
+
+## BullionVault read-only quote + microstructure research
+
+BullionVault remains strictly read-only in this project. The adapter implements view-market only; no place-order or cancel-order methods exist.
+
+For current authenticated market data, configure both credentials directly in Railway Secrets:
+
+```text
+BULLIONVAULT_ACCESS_MODE=authenticated
+BULLIONVAULT_USERNAME=<secret>
+BULLIONVAULT_PASSWORD=<secret>
+BULLIONVAULT_SECURITY_ID=AGXLN
+BULLIONVAULT_CURRENCY=USD
+BULLIONVAULT_MARKET_WIDTH=5
+BULLIONVAULT_MINIMUM_QUANTITY_KG=0.001
+BULLIONVAULT_PUBLIC_FALLBACK=true
+```
+
+To start the **separate research collector**, explicitly opt in:
+
+```text
+BULLIONVAULT_MICROSTRUCTURE_ENABLED=true
+BULLIONVAULT_MICROSTRUCTURE_INTERVAL_SECONDS=60
+BULLIONVAULT_MICROSTRUCTURE_DB_PATH=/data/bullionvault_microstructure.sqlite3
+```
+
+The 60-second default makes one view-market request per minute. BullionVault currently documents a maximum of 60 view-market requests per minute, so this collector deliberately operates far below that ceiling. The interval is validated between 30 and 3600 seconds.
+
+The collector persists every raw visible bid/ask level plus versioned causal features such as spread, depth imbalance, microprice bias, VWAP/depth distance, book slope, and changes from the immediately prior observed snapshot. It does **not** feed those features into the frozen models. They remain a separate candidate research dataset until a future purged/CPCV experiment proves incremental value.
+
+Read-only research endpoints:
+
+```text
+GET /api/v1/research/microstructure/status
+GET /api/v1/research/microstructure/latest
+GET /api/v1/research/microstructure/history?limit=100
 ```
 
 For Telegram also set:

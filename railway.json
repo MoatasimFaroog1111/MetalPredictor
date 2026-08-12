@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile.live",
     "watchPatterns": [
       "/src/metal_predictor/live/**",
+      "/src/metal_predictor/microstructure/**",
       "/src/metal_predictor/frozen_ridge.py",
       "/src/metal_predictor/future_features.py",
       "/src/metal_predictor/features.py",
