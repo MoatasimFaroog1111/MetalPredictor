@@ -1,7 +1,21 @@
 const $ = (id) => document.getElementById(id);
 const money = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD', minimumFractionDigits:2, maximumFractionDigits:2});
 const pct = (logReturn) => `${((Math.exp(Number(logReturn)) - 1) * 100).toFixed(4)}%`;
-const stamp = (value) => value ? new Date(value).toISOString().replace('.000Z','Z') : '—';
+const saudiFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', {
+  timeZone: 'Asia/Riyadh',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+const stamp = (value) => value ? `${saudiFormatter.format(new Date(value))} (السعودية)` : '—';
+const delayText = (seconds) => {
+  if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return '—';
+  return `${(Number(seconds) / 60).toFixed(1)} دقيقة`;
+};
 
 function direction(el, value) {
   const text = value || '—';
@@ -17,7 +31,12 @@ function setService(ok, label) {
 
 function applyForecast(data) {
   $('current-price').textContent = money.format(data.current_price_usd_per_kg);
-  $('feature-time').textContent = `Feature hour: ${stamp(data.feature_timestamp_utc)} • Decision: ${stamp(data.decision_time_utc)}`;
+  $('feature-time').textContent = [
+    `ساعة البيانات: ${stamp(data.feature_timestamp_utc)}`,
+    `وقت النموذج النظري: ${stamp(data.decision_time_utc)}`,
+    `وقت الإصدار الفعلي: ${stamp(data.materialized_at_utc)}`,
+    `تأخير النشر: ${delayText(data.publication_delay_seconds)}`,
+  ].join(' • ');
   $('baseline-model').textContent = data.baseline_model;
   $('challenger-model').textContent = data.challenger_model;
   direction($('baseline-direction'), data.baseline_direction);
@@ -122,7 +141,7 @@ async function refresh() {
     renderTable(history);
     renderChart(history);
     setService(true, 'النظام يعمل');
-    $('last-refresh').textContent = `آخر تحديث: ${new Date().toISOString().replace('.000Z','Z')}`;
+    $('last-refresh').textContent = `آخر تحديث: ${stamp(new Date().toISOString())}`;
   } catch (error) {
     console.error(error);
     setService(false, 'تعذر الاتصال');
