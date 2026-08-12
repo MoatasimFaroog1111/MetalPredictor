@@ -19,7 +19,7 @@ from metal_predictor.features import (
 )
 from metal_predictor.leakage import StrictLeakageGuard
 from metal_predictor.pipeline import TrainingDataPipeline
-from metal_predictor.precious_metals_features import PlatinumPalladiumCrossAssetFeatures
+from metal_predictor.precious_metals.features import PlatinumPalladiumCrossAssetFeatures
 from metal_predictor.splitting import ChronologicalPurgedSplitter
 from metal_predictor.targets import NextHourTargetBuilder
 
@@ -75,6 +75,7 @@ def build() -> dict[str, object]:
     report = {
         **report,
         "cross_assets": ["XPT/USD", "XPD/USD"],
+        "feature_family_version": "precious-metals-cross-asset-v1",
         "base_plus_precious_metals_feature_count": int(manifest["feature_count"]),
         "platinum_source_path": str(PLATINUM_PATH),
         "palladium_source_path": str(PALLADIUM_PATH),
