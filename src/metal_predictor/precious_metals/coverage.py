@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Protocol
 
 import pandas as pd
 
-from metal_predictor.walk_forward import PurgedWalkForwardSplitter
+
+class CoverageFold(Protocol):
+    number: int
+    train: pd.DataFrame
+    validation: pd.DataFrame
+
+
+class DevelopmentSplitter(Protocol):
+    def split(self, frame: pd.DataFrame) -> tuple[CoverageFold, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -46,7 +55,7 @@ class PreciousMetalsCoverageValidator:
     def validate(
         self,
         development: pd.DataFrame,
-        splitter: PurgedWalkForwardSplitter,
+        splitter: DevelopmentSplitter,
     ) -> dict[str, object]:
         missing = set(self._REQUIRED).difference(development.columns)
         if missing:
