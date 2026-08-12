@@ -19,6 +19,15 @@ const saudiTime = new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', {
 
 const $ = (id) => document.getElementById(id);
 
+function ensureStyles() {
+  if (document.querySelector('link[data-spread-profit-styles]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/static/components/spread-profit-simulator.css';
+  link.dataset.spreadProfitStyles = 'true';
+  document.head.appendChild(link);
+}
+
 function numberOrNull(value) {
   if (value === '' || value === null || value === undefined) return null;
   const numeric = Number(value);
@@ -121,6 +130,8 @@ async function calculate(form) {
 }
 
 export function mountSpreadProfitSimulator() {
+  ensureStyles();
+
   const openButton = $('spread-simulator-open');
   const dialog = $('spread-simulator-dialog');
   const closeButton = $('spread-simulator-close');
