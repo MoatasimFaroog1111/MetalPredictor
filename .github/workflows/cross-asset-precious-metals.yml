@@ -1,0 +1,94 @@
+name: Cross-Asset Platinum Palladium Research
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/metal_predictor/precious_metals_features.py"
+      - "build_platinum_palladium_datasets.py"
+      - "build_precious_metals_cross_asset_dataset.py"
+      - "compare_precious_metals_features.py"
+      - "tests/test_precious_metals_features.py"
+      - ".github/workflows/cross-asset-precious-metals.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  component-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+      - name: Compile research components
+        run: |
+          python -m compileall -q src/metal_predictor/precious_metals_features.py \
+            build_platinum_palladium_datasets.py \
+            build_precious_metals_cross_asset_dataset.py \
+            compare_precious_metals_features.py
+      - name: Run causal and regression tests
+        run: |
+          pytest tests/test_precious_metals_features.py \
+            tests/test_pipeline.py \
+            tests/test_model_training.py \
+            tests/test_cross_asset_gold.py
+
+  development-ab-research:
+    if: github.event_name == 'workflow_dispatch'
+    needs: component-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+      - name: Build frozen Silver development data
+        run: python build_training_dataset.py
+      - name: Build XPT and XPD H1 research datasets
+        run: python build_platinum_palladium_datasets.py
+      - name: Build enhanced development dataset
+        run: python build_precious_metals_cross_asset_dataset.py
+      - name: Compare frozen Ridge recipe on development only
+        run: python compare_precious_metals_features.py
+      - name: Upload research artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: platinum-palladium-cross-asset-research
+          path: |
+            data/market/XPTUSD_H1_*
+            data/market/XPDUSD_H1_*
+            data/market/XPT_XPD_H1_build_report.json
+            data/processed_precious_metals/
+            artifacts/cross_asset_precious_metals/
+          if-no-files-found: error
