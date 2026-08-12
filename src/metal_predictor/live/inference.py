@@ -23,6 +23,11 @@ class LivePredictionEngine:
     No fitting, tuning, threshold optimization, or performance measurement occurs here.
     Ridge(alpha=100) stays the operational baseline; Ridge(alpha=10) is exposed only
     as the predeclared research challenger from Stage 7.
+
+    ``decision_time_utc`` is the frozen model's exact-hour decision clock
+    (feature timestamp + 1 hour). ``materialized_at_utc`` records when the live service
+    actually produced the forecast, so operational collection latency is auditable
+    instead of being mistaken for exact-hour availability.
     """
 
     def __init__(self, repository_root: Path) -> None:
@@ -99,6 +104,7 @@ class LivePredictionEngine:
         baseline_price = close * math.exp(baseline_return)
         challenger_price = close * math.exp(challenger_return)
         latest_bar = ordered_bars[-1]
+        materialized_at = datetime.now(timezone.utc)
 
         return ForecastSnapshot(
             feature_timestamp_utc=newest.to_pydatetime(),
@@ -118,6 +124,7 @@ class LivePredictionEngine:
                 latest_bar.source_provider == "HistData"
                 and latest_bar.market_type == "spot_bid"
             ),
+            materialized_at_utc=materialized_at,
         )
 
     def model_status(self) -> dict[str, object]:

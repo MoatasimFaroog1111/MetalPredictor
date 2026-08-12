@@ -3,6 +3,17 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Protocol
+from zoneinfo import ZoneInfo
+
+
+SAUDI_TIMEZONE_NAME = "Asia/Riyadh"
+_SAUDI_TIMEZONE = ZoneInfo(SAUDI_TIMEZONE_NAME)
+
+
+def _saudi_iso(value: datetime) -> str:
+    if value.tzinfo is None:
+        raise ValueError("Datetime must be timezone-aware.")
+    return value.astimezone(_SAUDI_TIMEZONE).isoformat()
 
 
 @dataclass(frozen=True)
@@ -21,6 +32,8 @@ class HourlySilverBar:
     def as_dict(self) -> dict[str, object]:
         data = asdict(self)
         data["timestamp_utc"] = self.timestamp_utc.isoformat()
+        data["timestamp_saudi"] = _saudi_iso(self.timestamp_utc)
+        data["display_timezone"] = SAUDI_TIMEZONE_NAME
         return data
 
 
@@ -40,13 +53,32 @@ class ForecastSnapshot:
     data_quality: str
     source_provider: str
     source_compatible_with_training: bool
+    materialized_at_utc: datetime | None = None
     edge_status: str = "NOT_PROVEN"
     research_only: bool = True
 
     def as_dict(self) -> dict[str, object]:
         data = asdict(self)
-        data["feature_timestamp_utc"] = self.feature_timestamp_utc.isoformat()
-        data["decision_time_utc"] = self.decision_time_utc.isoformat()
+        feature = self.feature_timestamp_utc
+        model_clock = self.decision_time_utc
+        published = self.materialized_at_utc
+
+        data["feature_timestamp_utc"] = feature.isoformat()
+        data["decision_time_utc"] = model_clock.isoformat()
+        data["model_clock_decision_time_utc"] = model_clock.isoformat()
+        data["materialized_at_utc"] = published.isoformat() if published is not None else None
+
+        data["feature_timestamp_saudi"] = _saudi_iso(feature)
+        data["decision_time_saudi"] = _saudi_iso(model_clock)
+        data["model_clock_decision_time_saudi"] = _saudi_iso(model_clock)
+        data["materialized_at_saudi"] = _saudi_iso(published) if published is not None else None
+        data["display_timezone"] = SAUDI_TIMEZONE_NAME
+
+        data["decision_time_semantics"] = "MODEL_CLOCK_HOUR_BOUNDARY"
+        data["materialized_at_semantics"] = "ACTUAL_FORECAST_PUBLICATION_TIME"
+        data["publication_delay_seconds"] = (
+            (published - model_clock).total_seconds() if published is not None else None
+        )
         return data
 
 

@@ -114,6 +114,7 @@ class SQLiteForecastRepository:
 
     def put_forecast(self, snapshot: ForecastSnapshot) -> bool:
         timestamp = self._iso(snapshot.feature_timestamp_utc)
+        materialized_at = snapshot.materialized_at_utc or datetime.now(timezone.utc)
         with self._lock, self._connect() as conn:
             existing = conn.execute(
                 "SELECT * FROM forecasts WHERE feature_timestamp_utc = ?", (timestamp,)
@@ -151,7 +152,7 @@ class SQLiteForecastRepository:
                     int(snapshot.source_compatible_with_training),
                     snapshot.edge_status,
                     int(snapshot.research_only),
-                    self._now_iso(),
+                    self._iso(materialized_at),
                 ),
             )
             return True
@@ -273,6 +274,7 @@ class SQLiteForecastRepository:
             data_quality=str(row["data_quality"]),
             source_provider=str(row["source_provider"]),
             source_compatible_with_training=bool(row["source_compatible_with_training"]),
+            materialized_at_utc=cls._utc(datetime.fromisoformat(row["created_at_utc"])),
             edge_status=str(row["edge_status"]),
             research_only=bool(row["research_only"]),
         )
