@@ -124,17 +124,25 @@
       </div>
 
       <div class="spread-note">
-        GoldAPI يزوّدنا بسعر مرجعي ولا يزوّد Bid/Ask قابلين للتنفيذ. لذلك السبريد هنا افتراض بحثي صريح ولا يتم اختراع سعر سوق تنفيذي.
+        <b>BullionVault Read-Only</b> هو المصدر الافتراضي لـ Bid / Ask وعمق السوق الحالي. لا يحتوي هذا التكامل على أي وظيفة لإنشاء أو تعديل أو إلغاء أوامر. إذا لم تُضبط بيانات دخول BullionVault، يستخدم النظام نسخة السوق العامة المخزنة مؤقتًا ويعرض ذلك بوضوح.
+        <div id="spread-source-status" class="spread-source-status">سيتم فحص الاتصال عند فتح الشاشة.</div>
       </div>
 
       <form class="spread-form" id="spread-simulator-form">
         <label>
-          <span>السبريد الحالي USD/kg *</span>
-          <input name="currentSpread" inputmode="decimal" type="number" min="0" step="0.0001" required placeholder="مثال: 1.50" />
+          <span>مصدر Bid / Ask الحالي</span>
+          <select name="quoteSource">
+            <option value="bullionvault" selected>BullionVault Read-Only</option>
+            <option value="manual">إدخال Spread يدوي</option>
+          </select>
+        </label>
+        <label id="spread-manual-current-field" hidden>
+          <span>السبريد الحالي USD/kg</span>
+          <input name="currentSpread" inputmode="decimal" type="number" min="0" step="0.0001" placeholder="مثال: 1.50" />
         </label>
         <label>
           <span>السبريد المتوقع بعد ساعة</span>
-          <input name="forecastSpread" inputmode="decimal" type="number" min="0" step="0.0001" placeholder="فارغ = نفس الحالي" />
+          <input name="forecastSpread" inputmode="decimal" type="number" min="0" step="0.0001" placeholder="فارغ = نفس السبريد الحالي" />
         </label>
         <label>
           <span>الربح المستهدف USD</span>
@@ -152,6 +160,7 @@
           <span>خطوة الكمية kg</span>
           <input name="quantityStep" inputmode="decimal" type="number" min="0.000001" step="0.001" value="0.001" />
         </label>
+        <div id="spread-source-help" class="spread-source-help"></div>
         <button class="primary-button" id="spread-simulator-calculate" type="submit">احسب السيناريو</button>
       </form>
 
@@ -162,7 +171,7 @@
           <div class="section-head">
             <div>
               <div class="eyebrow">Reference Quote</div>
-              <h3>السعر المرجعي عند <span id="spread-current-time">—</span></h3>
+              <h3>السعر الحالي عند <span id="spread-current-time">—</span></h3>
             </div>
             <div class="spread-time">التوقع عند <b id="spread-target-time">—</b></div>
           </div>
@@ -172,6 +181,10 @@
             <div><span>شراء الآن Ask</span><b id="spread-current-ask">—</b></div>
             <div><span>Spread الحالي</span><b id="spread-current-width">—</b></div>
             <div><span>Spread المتوقع</span><b id="spread-forecast-width">—</b></div>
+            <div><span>المصدر</span><b id="spread-quote-source">—</b></div>
+            <div><span>وضع الوصول</span><b id="spread-quote-mode">—</b></div>
+            <div><span>كمية أفضل Bid</span><b id="spread-bid-quantity">—</b></div>
+            <div><span>كمية أفضل Ask</span><b id="spread-ask-quantity">—</b></div>
           </div>
         </section>
 
@@ -222,7 +235,7 @@
         </div>
 
         <div class="spread-safety">
-          هذا حساب بحثي للهوامش وتكلفة السبريد فقط. لا توجد توصية تداول، ولا يتم إنشاء BUY/SELL، ولا يوجد تنفيذ أو إرسال أوامر.
+          الحساب بحثي فقط. السبريد الحالي يأتي من BullionVault عند اختيار المصدر الحي، لكن السبريد والسيولة بعد ساعة غير معروفين مسبقًا. عمولة BullionVault غير محسوبة تلقائيًا؛ يمكن إدخال تكلفة ثابتة يدويًا. لا توجد توصية تداول ولا إرسال أوامر، وBUY/SELL يبقى معطّلًا.
         </div>
       </div>
     </div>
