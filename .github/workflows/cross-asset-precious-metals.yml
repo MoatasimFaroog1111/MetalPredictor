@@ -1,0 +1,93 @@
+name: Cross-Asset Platinum Palladium Research
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  precious-metals-feature-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      DUKASCOPY_API_KEY: ${{ secrets.DUKASCOPY_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run precious-metals causal tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_precious_metals.py
+
+      - name: Require research data credential without printing it
+        run: |
+          python - <<'PY'
+          import os
+          if not os.environ.get('DUKASCOPY_API_KEY', '').strip():
+              raise SystemExit('DUKASCOPY_API_KEY repository secret is not configured.')
+          print('Dukascopy research credential is configured.')
+          PY
+
+      - name: Build frozen Silver baseline development data
+        run: python build_training_dataset.py
+
+      - name: Build XPT and XPD hourly research datasets
+        run: python build_precious_metals_dataset.py
+
+      - name: Show source quality report
+        run: cat data/market/precious_metals_source_report.json
+
+      - name: Build Silver plus pre-registered XPT/XPD candidate data
+        run: python build_precious_metals_cross_asset_dataset.py
+
+      - name: Compare on development only with frozen Ridge recipe
+        run: python compare_precious_metals_features.py
+
+      - name: Show paired feature report
+        run: cat artifacts/cross_asset_precious_metals/precious_metals_ab_report.json
+
+      - name: Assert experiment never used future holdout or old test
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('artifacts/cross_asset_precious_metals/precious_metals_ab_report.json').read_text())
+          assert report['research_policy']['test_data_read'] is False
+          assert report['guardrails']['future_holdout_read'] is False
+          assert report['guardrails']['old_test_read'] is False
+          assert report['guardrails']['live_model_mutated'] is False
+          assert report['guardrails']['frozen_52_feature_graph_mutated'] is False
+          print('Research isolation guards: PASS')
+          PY
+
+      - name: Upload precious-metals research artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-platinum-palladium-cross-asset-research
+          path: |
+            data/market/XPTUSD_H1_USD_PER_KG.parquet
+            data/market/XPTUSD_H1_USD_PER_KG.csv
+            data/market/XPTUSD_H1_USD_PER_KG_quality_report.json
+            data/market/XPDUSD_H1_USD_PER_KG.parquet
+            data/market/XPDUSD_H1_USD_PER_KG.csv
+            data/market/XPDUSD_H1_USD_PER_KG_quality_report.json
+            data/market/precious_metals_source_report.json
+            data/processed_precious_metals/
+            artifacts/cross_asset_precious_metals/
+          if-no-files-found: error
