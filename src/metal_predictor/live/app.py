@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from metal_predictor.live.catchup import LiveMarketCatchUpService
 from metal_predictor.live.contracts import HourlySilverBar
 from metal_predictor.live.inference import LiveForecastOrchestrator, LivePredictionEngine
-from metal_predictor.live.market_sources import TwelveDataSilverMinuteSource
+from metal_predictor.live.market_source_factory import build_live_market_source
 from metal_predictor.live.notifications import TelegramForecastPublisher
 from metal_predictor.live.repository import SQLiteForecastRepository
 from metal_predictor.live.scheduler import HourlyCollectionScheduler
@@ -68,11 +68,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         else None
     )
     orchestrator = LiveForecastOrchestrator(repository, engine, notifier)
-    source = (
-        TwelveDataSilverMinuteSource(config.twelvedata_api_key, config.twelvedata_symbol)
-        if config.market_source_enabled
-        else None
-    )
+    source = build_live_market_source(config)
     catchup = (
         LiveMarketCatchUpService(source, repository, engine, orchestrator)
         if source is not None
@@ -186,9 +182,9 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
             "model": engine.model_status(),
             "market_source": {
                 "configured": config.market_source_enabled,
-                "provider": "TwelveData" if config.market_source_enabled else None,
-                "symbol": config.twelvedata_symbol if config.market_source_enabled else None,
-                "mode": "M1_TO_H1_CONSERVATIVE_AGGREGATION" if config.market_source_enabled else None,
+                "provider": config.resolved_market_provider,
+                "symbol": config.market_source_symbol,
+                "mode": config.market_source_mode,
             },
             "automatic_collection": {
                 "enabled": config.auto_collection_enabled,
@@ -256,7 +252,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         if catchup is None:
             raise HTTPException(
                 status_code=503,
-                detail="TWELVEDATA_API_KEY is not configured; automatic collection is disabled.",
+                detail="No live market provider/API key is configured; automatic collection is disabled.",
             )
         target = hour_start_utc or orchestrator.previous_completed_hour()
         if target.tzinfo is None:
