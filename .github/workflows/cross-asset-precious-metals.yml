@@ -32,8 +32,8 @@ jobs:
           python -m pip install -r requirements-modeling.txt
           python -m pip install -e .
 
-      - name: Run precious-metals causal and coverage tests
-        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_precious_metals.py tests/test_precious_metals_coverage.py
+      - name: Run precious-metals causal, coverage, and provenance tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_precious_metals.py tests/test_precious_metals_coverage.py tests/test_precious_metals_provenance.py
 
       - name: Require research data credential without printing it
         run: |
