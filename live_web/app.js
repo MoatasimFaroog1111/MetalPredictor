@@ -11,7 +11,14 @@ const saudiFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', {
   second: '2-digit',
   hourCycle: 'h23',
 });
+const saudiTimeFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', {
+  timeZone: 'Asia/Riyadh',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
 const stamp = (value) => value ? `${saudiFormatter.format(new Date(value))} (السعودية)` : '—';
+const timeOnly = (value) => value ? saudiTimeFormatter.format(new Date(value)) : '—';
 const delayText = (seconds) => {
   if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return '—';
   return `${(Number(seconds) / 60).toFixed(1)} دقيقة`;
@@ -30,12 +37,15 @@ function setService(ok, label) {
 }
 
 function applyForecast(data) {
+  const currentTime = data.current_price_time_utc || data.decision_time_utc;
+  const targetTime = data.forecast_target_time_utc;
+
   $('current-price').textContent = money.format(data.current_price_usd_per_kg);
   $('feature-time').textContent = [
-    `ساعة البيانات: ${stamp(data.feature_timestamp_utc)}`,
-    `وقت النموذج النظري: ${stamp(data.decision_time_utc)}`,
-    `وقت الإصدار الفعلي: ${stamp(data.materialized_at_utc)}`,
-    `تأخير النشر: ${delayText(data.publication_delay_seconds)}`,
+    `السعر المرجعي عند ${stamp(currentTime)}`,
+    `التوقع للساعة ${stamp(targetTime)}`,
+    `صدر فعليًا ${stamp(data.materialized_at_utc)}`,
+    `تأخير النشر ${delayText(data.publication_delay_seconds)}`,
   ].join(' • ');
   $('baseline-model').textContent = data.baseline_model;
   $('challenger-model').textContent = data.challenger_model;
@@ -45,6 +55,8 @@ function applyForecast(data) {
   $('challenger-price').textContent = money.format(data.challenger_predicted_price_usd_per_kg);
   $('baseline-return').textContent = pct(data.baseline_log_return_1h);
   $('challenger-return').textContent = pct(data.challenger_log_return_1h);
+  $('baseline-target-time').textContent = targetTime ? timeOnly(targetTime) : '—';
+  $('challenger-target-time').textContent = targetTime ? timeOnly(targetTime) : '—';
   $('data-quality').textContent = data.data_quality;
   $('source-provider').textContent = data.source_provider;
   $('feed-compatibility').textContent = data.source_compatible_with_training ? 'TRAINING-COMPATIBLE' : 'UNVERIFIED CROSS-FEED';
@@ -75,8 +87,10 @@ function renderTable(history) {
   }
   for (const row of history.slice(0, 20)) {
     const tr = document.createElement('tr');
+    const currentTime = row.current_price_time_utc || row.decision_time_utc;
+    const targetTime = row.forecast_target_time_utc;
     const cells = [
-      stamp(row.feature_timestamp_utc),
+      `${timeOnly(currentTime)} → ${timeOnly(targetTime)}`,
       money.format(row.current_price_usd_per_kg),
       `${row.baseline_direction} ${pct(row.baseline_log_return_1h)}`,
       `${row.challenger_direction} ${pct(row.challenger_log_return_1h)}`,
