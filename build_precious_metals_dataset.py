@@ -79,6 +79,9 @@ def _write_instrument(
         "normalized_unit": "USD/kg",
         "timeframe": "1hour",
         "offer_side": "Bid",
+        "timestamp_semantics": "BAR_START_UTC",
+        "bar_duration_hours": 1,
+        "bar_value_availability": "KNOWN_AFTER_BAR_CLOSE",
         "authentication_required": False,
         "provider_first_h1_utc": spec.earliest_h1_utc.isoformat(),
         "rows": int(len(frame)),
@@ -95,6 +98,8 @@ def _write_instrument(
         "provenance_gate": provenance_assessment,
         "source_policy": {
             "exact_timestamp_alignment": True,
+            "bar_timestamp_is_start": True,
+            "model_consumes_completed_bar_only": True,
             "source_gaps_preserved": True,
             "synthetic_flat_candles": False,
             "forward_fill": False,
@@ -144,6 +149,8 @@ def build() -> dict[str, object]:
         "status": "SOURCE_ACQUIRED_UNVALIDATED_FOR_MODEL",
         "model_readiness": "PENDING_DEVELOPMENT_COVERAGE_GATE",
         "source_access": "KEYLESS_READ_ONLY_PUBLIC_HISTORY",
+        "timestamp_semantics": "BAR_START_UTC",
+        "bar_value_availability": "KNOWN_AFTER_BAR_CLOSE",
         "provenance_gate": {
             "status": "PASS",
             "validated_before_source_fetch": True,

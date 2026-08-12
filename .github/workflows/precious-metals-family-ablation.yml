@@ -1,0 +1,201 @@
+name: Precious Metals Family Ablation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  family-ablation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run causal source, coverage, ablation, and confirmation-policy tests
+        run: |
+          pytest tests/test_pipeline.py \
+            tests/test_model_training.py \
+            tests/test_cross_asset_precious_metals.py \
+            tests/test_precious_metals_coverage.py \
+            tests/test_precious_metals_provenance.py \
+            tests/test_dukascopy_public_precious_metals.py \
+            tests/test_precious_metals_ablation.py \
+            tests/test_precious_metals_confirmation.py
+
+      - name: Build frozen Silver baseline data
+        run: python build_training_dataset.py
+
+      - name: Build keyless XPT and XPD H1 research data
+        run: python build_precious_metals_dataset.py
+
+      - name: Assert source timing, provenance, and no synthetic fill
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('data/market/precious_metals_source_report.json').read_text())
+          assert r['source_access'] == 'KEYLESS_READ_ONLY_PUBLIC_HISTORY'
+          assert r['timestamp_semantics'] == 'BAR_START_UTC'
+          assert r['bar_value_availability'] == 'KNOWN_AFTER_BAR_CLOSE'
+          assert r['provenance_gate']['status'] == 'PASS'
+          assert r['provenance_gate']['validated_before_source_fetch'] is True
+          for item in r['instruments']:
+              assert item['timestamp_semantics'] == 'BAR_START_UTC'
+              assert item['bar_value_availability'] == 'KNOWN_AFTER_BAR_CLOSE'
+              assert item['source_policy']['bar_timestamp_is_start'] is True
+              assert item['source_policy']['model_consumes_completed_bar_only'] is True
+              assert item['source_policy']['synthetic_flat_candles'] is False
+              assert item['source_policy']['forward_fill'] is False
+              assert item['source_policy']['interpolation'] is False
+              assert item['exact_hour_rows'] == item['rows']
+          print('Source timing and causal acquisition guards: PASS')
+          PY
+
+      - name: Build pre-registered 43-feature XPT/XPD candidate data
+        run: python build_precious_metals_cross_asset_dataset.py
+
+      - name: Run pre-registered family ablation and stability comparisons
+        run: python run_precious_metals_family_ablation.py
+
+      - name: Show compact ablation result
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/cross_asset_precious_metals/ablation_v1/precious_metals_family_ablation_report.json')
+          r=json.loads(p.read_text())
+          print('status:', r['status'])
+          print('registry:', r['registry_fingerprint_sha256'])
+          print('full_43_improvement_percent:', r['full_43_reference']['mae_improvement_percent'])
+          print('retained_families:', r['parsimonious_candidate']['retained_families'])
+          print('retained_candidate_feature_count:', r['parsimonious_candidate']['retained_candidate_feature_count'])
+          print('total_model_feature_count:', r['parsimonious_candidate']['total_model_feature_count'])
+          for row in r['families']:
+              print(
+                  row['family'],
+                  row['classification'],
+                  'retain=', row['retain_in_parsimonious_candidate'],
+                  'addon_pct=', row['addon_evidence']['mae_improvement_percent'],
+                  'conditional_pct=', row['conditional_evidence']['mae_improvement_percent'],
+              )
+          print('diagnostic_vs_base:', r['parsimonious_candidate']['diagnostic_vs_base'])
+          print('diagnostic_full_vs_retained:', r['parsimonious_candidate']['diagnostic_full_43_vs_retained'])
+          PY
+
+      - name: Assert ablation isolation before historical Test confirmation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/cross_asset_precious_metals/ablation_v1/precious_metals_family_ablation_report.json')
+          r=json.loads(p.read_text())
+          assert r['status'] == 'PASS'
+          assert r['pre_registered_before_family_results'] is True
+          assert r['family_count'] == 7
+          assert r['candidate_feature_count'] == 43
+          assert r['coverage_gate']['status'] == 'PASS'
+          assert r['parsimonious_candidate']['retained_families'] == ['candle_shape', 'own_returns']
+          assert r['parsimonious_candidate']['retained_candidate_feature_count'] == 10
+          assert r['parsimonious_candidate']['total_model_feature_count'] == 62
+          assert r['parsimonious_candidate']['selection_derived_on_same_development_data'] is True
+          assert r['parsimonious_candidate']['live_promotion_eligible'] is False
+          assert r['parsimonious_candidate']['requires_new_or_nested_validation_before_any_promotion'] is True
+          assert r['research_policy']['old_test_read'] is False
+          assert r['research_policy']['future_holdout_read'] is False
+          assert r['guardrails']['edge_status'] == 'NOT_PROVEN'
+          assert r['guardrails']['live_model_mutated'] is False
+          assert r['guardrails']['frozen_52_feature_graph_mutated'] is False
+          assert r['guardrails']['buy_sell_enabled'] is False
+          assert r['guardrails']['execution_enabled'] is False
+          print('Ablation research isolation guards: PASS')
+          PY
+
+      - name: Run one-shot locked historical Test confirmation
+        run: python confirm_precious_metals_candidate.py
+
+      - name: Show historical confirmation result
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/cross_asset_precious_metals/historical_confirmation_v1/historical_confirmation_report.json')
+          r=json.loads(p.read_text())
+          d=r['primary_decision']
+          b=r['primary_confirmation']['paired_block_bootstrap']
+          bm=r['primary_confirmation']['base_metrics']
+          cm=r['primary_confirmation']['candidate_metrics']
+          ch=r['frozen_challenger_diagnostic']['paired_block_bootstrap']
+          print('confirmation_status:', d['status'])
+          print('candidate_id:', r['candidate_id'])
+          print('candidate_fingerprint:', r['candidate_fingerprint_sha256'])
+          print('test_rows:', r['historical_test']['rows'])
+          print('joint_coverage:', r['historical_test']['coverage']['joint'])
+          print('primary_mae_improvement_percent:', b['mae_improvement_percent'])
+          print('primary_ci95:', b['improvement_ci95_low'], b['improvement_ci95_high'])
+          print('primary_probability_better:', b['probability_selected_better'])
+          print('primary_directional_accuracy:', bm['directional_accuracy'], '->', cm['directional_accuracy'])
+          print('primary_directional_delta:', d['directional_accuracy_delta'])
+          print('challenger_mae_improvement_percent:', ch['mae_improvement_percent'])
+          PY
+
+      - name: Assert one-shot confirmation isolation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/cross_asset_precious_metals/historical_confirmation_v1/historical_confirmation_report.json')
+          r=json.loads(p.read_text())
+          assert r['execution_status'] == 'PASS'
+          assert r['confirmation_version'] == 'precious-metals-historical-confirmation-v1'
+          assert r['candidate_id'] == 'xpt-xpd-candle-shape-own-returns-v1'
+          assert r['candidate_feature_count'] == 10
+          assert r['total_model_feature_count'] == 62
+          assert r['primary_decision']['policy_fixed_before_old_test_read'] is True
+          assert r['primary_decision']['candidate_features_locked_before_old_test_read'] is True
+          assert r['primary_decision']['no_post_test_feature_tuning_allowed'] is True
+          assert r['research_policy']['old_test_read'] is True
+          assert r['research_policy']['old_test_used_for_feature_selection'] is False
+          assert r['research_policy']['candidate_locked_before_old_test_read'] is True
+          assert r['research_policy']['no_post_test_feature_tuning_allowed'] is True
+          assert r['research_policy']['future_holdout_read'] is False
+          assert r['research_policy']['formal_future_holdout_status'] == 'SEALED_UNREAD'
+          assert r['research_policy']['live_promotion_eligible'] is False
+          assert r['guardrails']['edge_status'] == 'NOT_PROVEN'
+          assert r['guardrails']['live_model_mutated'] is False
+          assert r['guardrails']['frozen_52_feature_graph_mutated'] is False
+          assert r['guardrails']['buy_sell_enabled'] is False
+          assert r['guardrails']['execution_enabled'] is False
+          print('Historical confirmation isolation guards: PASS')
+          PY
+
+      - name: Upload precious-metals ablation and confirmation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: precious-metals-ablation-and-confirmation-v1
+          path: |
+            data/market/XPTUSD_H1_USD_PER_KG_quality_report.json
+            data/market/XPDUSD_H1_USD_PER_KG_quality_report.json
+            data/market/precious_metals_source_report.json
+            artifacts/cross_asset_precious_metals/ablation_v1/
+            artifacts/cross_asset_precious_metals/historical_confirmation_v1/
+          if-no-files-found: error
