@@ -23,6 +23,10 @@ from metal_predictor.live.repository import SQLiteForecastRepository
 from metal_predictor.live.scheduler import HourlyCollectionScheduler
 from metal_predictor.live.settings import LiveSettings
 from metal_predictor.live.spread_api import create_spread_research_router
+from metal_predictor.microstructure.api import create_microstructure_research_router
+from metal_predictor.microstructure.collector import MicrostructureResearchCollector
+from metal_predictor.microstructure.repository import SQLiteMicrostructureRepository
+from metal_predictor.microstructure.scheduler import MicrostructureResearchScheduler
 
 
 class HourlyBarRequest(BaseModel):
@@ -62,6 +66,9 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     db_path = config.database_path
     if not db_path.is_absolute():
         db_path = root / db_path
+    microstructure_db_path = config.bullionvault_microstructure_database_path
+    if not microstructure_db_path.is_absolute():
+        microstructure_db_path = root / microstructure_db_path
 
     repository = SQLiteForecastRepository(db_path)
     engine = LivePredictionEngine(root)
@@ -73,6 +80,11 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     orchestrator = LiveForecastOrchestrator(repository, engine, notifier)
     source = build_live_market_source(config)
     bullionvault_quote_provider = build_bullionvault_quote_provider(config)
+    microstructure_repository = SQLiteMicrostructureRepository(microstructure_db_path)
+    microstructure_collector = MicrostructureResearchCollector(
+        bullionvault_quote_provider,
+        microstructure_repository,
+    )
     catchup = (
         LiveMarketCatchUpService(source, repository, engine, orchestrator)
         if source is not None
@@ -86,22 +98,40 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         if config.auto_collection_enabled and catchup is not None
         else None
     )
+    microstructure_scheduler = (
+        MicrostructureResearchScheduler(
+            microstructure_collector,
+            interval_seconds=config.bullionvault_microstructure_interval_seconds,
+        )
+        if config.bullionvault_microstructure_enabled
+        else None
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        scheduler_task: asyncio.Task[None] | None = None
+        background_tasks: list[asyncio.Task[None]] = []
         if scheduler is not None:
-            scheduler_task = asyncio.create_task(
-                scheduler.run_forever(),
-                name="silver-hourly-catch-up",
+            background_tasks.append(
+                asyncio.create_task(
+                    scheduler.run_forever(),
+                    name="silver-hourly-catch-up",
+                )
+            )
+        if microstructure_scheduler is not None:
+            background_tasks.append(
+                asyncio.create_task(
+                    microstructure_scheduler.run_forever(),
+                    name="bullionvault-microstructure-research",
+                )
             )
         try:
             yield
         finally:
-            if scheduler_task is not None:
-                scheduler_task.cancel()
+            for task in background_tasks:
+                task.cancel()
+            for task in background_tasks:
                 with suppress(asyncio.CancelledError):
-                    await scheduler_task
+                    await task
 
     app = FastAPI(
         title="Silver AI Forecast API",
@@ -118,6 +148,9 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     app.state.orchestrator = orchestrator
     app.state.market_source = source
     app.state.bullionvault_quote_provider = bullionvault_quote_provider
+    app.state.microstructure_repository = microstructure_repository
+    app.state.microstructure_collector = microstructure_collector
+    app.state.microstructure_scheduler = microstructure_scheduler
     app.state.catchup = catchup
     app.state.telegram = notifier
     app.state.scheduler = scheduler
@@ -127,6 +160,13 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         create_bullionvault_research_router(
             orchestrator.latest,
             bullionvault_quote_provider,
+        )
+    )
+    app.include_router(
+        create_microstructure_research_router(
+            microstructure_repository,
+            collection_enabled=config.bullionvault_microstructure_enabled,
+            interval_seconds=config.bullionvault_microstructure_interval_seconds,
         )
     )
 
@@ -190,6 +230,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     def status() -> dict[str, object]:
         latest = orchestrator.latest()
         recent_bars = repository.recent_bars(limit=1)
+        latest_microstructure = microstructure_repository.latest_record()
         return {
             "service": "silver-ai-live",
             "model": engine.model_status(),
@@ -208,6 +249,18 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
                 "public_fallback": config.bullionvault_public_fallback,
                 "read_only": True,
                 "execution_enabled": False,
+            },
+            "bullionvault_microstructure": {
+                "enabled": config.bullionvault_microstructure_enabled,
+                "interval_seconds": config.bullionvault_microstructure_interval_seconds,
+                "snapshot_count": microstructure_repository.count(),
+                "latest_captured_at_utc": (
+                    latest_microstructure.snapshot.captured_at_utc.isoformat()
+                    if latest_microstructure
+                    else None
+                ),
+                "research_only": True,
+                "frozen_feature_graph_mutated": False,
             },
             "automatic_collection": {
                 "enabled": config.auto_collection_enabled,
