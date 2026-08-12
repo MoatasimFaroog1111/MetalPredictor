@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import os
 from pathlib import Path
 
@@ -29,6 +30,14 @@ class LiveSettings:
     twelvedata_symbol: str = "XAG/USD"
     auto_collect: bool = False
     collection_delay_minutes: int = 5
+    bullionvault_username: str = ""
+    bullionvault_password: str = ""
+    bullionvault_access_mode: str = "auto"
+    bullionvault_security_id: str = "AGXLN"
+    bullionvault_currency: str = "USD"
+    bullionvault_market_width: int = 5
+    bullionvault_minimum_quantity_kg: float = 0.001
+    bullionvault_public_fallback: bool = True
     telegram_bot_token: str = ""
     telegram_webhook_secret: str = ""
     telegram_allowed_chat_ids: tuple[str, ...] = ()
@@ -48,6 +57,40 @@ class LiveSettings:
             raise ValueError("Gold API Silver source requires GOLD_API_SYMBOL=XAG.")
         if not 1 <= int(self.collection_delay_minutes) <= 30:
             raise ValueError("collection_delay_minutes must be between 1 and 30.")
+
+        bv_mode = self.bullionvault_access_mode.strip().lower()
+        if bv_mode not in {"auto", "authenticated", "public"}:
+            raise ValueError(
+                "bullionvault_access_mode must be auto, authenticated, or public."
+            )
+        has_bv_user = bool(self.bullionvault_username.strip())
+        has_bv_password = bool(self.bullionvault_password)
+        if has_bv_user != has_bv_password:
+            raise ValueError(
+                "BULLIONVAULT_USERNAME and BULLIONVAULT_PASSWORD must be configured together."
+            )
+        if bv_mode == "authenticated" and not (has_bv_user and has_bv_password):
+            raise ValueError(
+                "BullionVault authenticated mode requires username and password."
+            )
+        if self.bullionvault_security_id.strip().upper() not in {
+            "AGXLN",
+            "AGXZU",
+            "AGXTR",
+            "AGXSG",
+        }:
+            raise ValueError(
+                "BullionVault Silver security must be AGXLN, AGXZU, AGXTR, or AGXSG."
+            )
+        if self.bullionvault_currency.strip().upper() != "USD":
+            raise ValueError("BullionVault integration currently requires USD quotes.")
+        if not 1 <= int(self.bullionvault_market_width) <= 20:
+            raise ValueError("BULLIONVAULT_MARKET_WIDTH must be between 1 and 20.")
+        if (
+            not math.isfinite(float(self.bullionvault_minimum_quantity_kg))
+            or float(self.bullionvault_minimum_quantity_kg) <= 0
+        ):
+            raise ValueError("BULLIONVAULT_MINIMUM_QUANTITY_KG must be finite and positive.")
 
     @classmethod
     def from_environment(cls, repository_root: Path | None = None) -> "LiveSettings":
@@ -69,6 +112,24 @@ class LiveSettings:
             twelvedata_symbol=os.getenv("TWELVEDATA_SYMBOL", "XAG/USD").strip() or "XAG/USD",
             auto_collect=_environment_bool("LIVE_AUTO_COLLECT", False),
             collection_delay_minutes=int(os.getenv("LIVE_COLLECTION_DELAY_MINUTES", "5")),
+            bullionvault_username=os.getenv("BULLIONVAULT_USERNAME", "").strip(),
+            bullionvault_password=os.getenv("BULLIONVAULT_PASSWORD", ""),
+            bullionvault_access_mode=(
+                os.getenv("BULLIONVAULT_ACCESS_MODE", "auto").strip().lower() or "auto"
+            ),
+            bullionvault_security_id=(
+                os.getenv("BULLIONVAULT_SECURITY_ID", "AGXLN").strip().upper() or "AGXLN"
+            ),
+            bullionvault_currency=(
+                os.getenv("BULLIONVAULT_CURRENCY", "USD").strip().upper() or "USD"
+            ),
+            bullionvault_market_width=int(os.getenv("BULLIONVAULT_MARKET_WIDTH", "5")),
+            bullionvault_minimum_quantity_kg=float(
+                os.getenv("BULLIONVAULT_MINIMUM_QUANTITY_KG", "0.001")
+            ),
+            bullionvault_public_fallback=_environment_bool(
+                "BULLIONVAULT_PUBLIC_FALLBACK", True
+            ),
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
             telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip(),
             telegram_allowed_chat_ids=allowed,
@@ -113,6 +174,19 @@ class LiveSettings:
     @property
     def auto_collection_enabled(self) -> bool:
         return bool(self.auto_collect and self.market_source_enabled)
+
+    @property
+    def bullionvault_authenticated_configured(self) -> bool:
+        return bool(self.bullionvault_username.strip() and self.bullionvault_password)
+
+    @property
+    def bullionvault_resolved_access_mode(self) -> str:
+        mode = self.bullionvault_access_mode.strip().lower()
+        if mode == "authenticated":
+            return "authenticated"
+        if mode == "public":
+            return "public"
+        return "authenticated" if self.bullionvault_authenticated_configured else "public"
 
     @property
     def telegram_enabled(self) -> bool:

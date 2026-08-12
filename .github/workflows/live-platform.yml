@@ -10,6 +10,7 @@ on:
       - "tests/test_gold_api_live_source.py"
       - "tests/test_live_time_audit.py"
       - "tests/test_spread_profit.py"
+      - "tests/test_bullionvault_quotes.py"
       - "requirements-live.txt"
       - "run_live.py"
       - "docker_entrypoint_live.py"
@@ -31,6 +32,7 @@ on:
       - "tests/test_gold_api_live_source.py"
       - "tests/test_live_time_audit.py"
       - "tests/test_spread_profit.py"
+      - "tests/test_bullionvault_quotes.py"
       - "requirements-live.txt"
       - "run_live.py"
       - "docker_entrypoint_live.py"
@@ -69,7 +71,7 @@ jobs:
       - name: Compile live package
         run: python -m compileall -q src/metal_predictor/live run_live.py docker_entrypoint_live.py
       - name: Run live platform tests
-        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py
+        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py
 
   docker:
     runs-on: ubuntu-24.04
