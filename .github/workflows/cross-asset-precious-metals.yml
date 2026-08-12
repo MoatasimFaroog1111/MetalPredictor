@@ -2,6 +2,9 @@ name: Cross-Asset Platinum Palladium Research
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - research/run-precious-metals-keyless-20260812
 
 permissions:
   contents: read
