@@ -1,0 +1,74 @@
+{
+  "audit_id": "fixed-xpt-xpd-bootstrap-audit-v1",
+  "audited_at_utc": "2026-08-12T12:26:00Z",
+  "source_repository": "MoatasimFaroog1111/fixed",
+  "source_main_commit": "672845b854cbfae2284f68df28369dd6f3de94bb",
+  "source_generator": "data_fetcher.py",
+  "evidence": {
+    "hourly_request_horizon_days": 729,
+    "daily_start": "2013-01-01",
+    "platinum": {
+      "fixed_security_id": "PTXLN",
+      "upstream_symbol": "PL=F",
+      "instrument_semantics": "FUTURES",
+      "hourly_path": "data/PTXLN_hourly.pkl",
+      "hourly_blob_sha": "fe5238d9027aeb1db81ce11316b76b4a55ee19d0",
+      "hourly_file_size_bytes": 458172
+    },
+    "palladium": {
+      "fixed_security_id": "PDXLN",
+      "upstream_symbol": "PA=F",
+      "instrument_semantics": "FUTURES",
+      "hourly_path": "data/PDXLN_hourly.pkl",
+      "hourly_blob_sha": "4f79853ae6af162e5d24394862bb997077d5df96",
+      "hourly_file_size_bytes": 457412
+    },
+    "cleaned_hourly_columns": ["close", "high", "low", "volume"],
+    "open_price_retained": false,
+    "explicit_utc_normalization_in_generator": false,
+    "forward_fill_in_generator": false,
+    "interpolation_in_generator": false,
+    "embedded_dataset_provenance_manifest": false,
+    "data_files_first_committed_at_utc": "2026-06-02T07:45:46Z"
+  },
+  "pre_registered_phase_2_gate": {
+    "minimum_history_days": 1825,
+    "complete_ohlc_required": true,
+    "exact_utc_hour_required": true,
+    "futures_allowed_as_direct_bootstrap": false,
+    "embedded_provenance_required": true,
+    "forward_fill_allowed": false,
+    "interpolation_allowed": false
+  },
+  "assessment": {
+    "status": "REJECT_AS_HISTORICAL_H1_BOOTSTRAP",
+    "failures": [
+      "INSTRUMENT_SEMANTICS_NOT_ALLOWED",
+      "INSUFFICIENT_HOURLY_HISTORY",
+      "INCOMPLETE_OHLC_SCHEMA",
+      "EXACT_UTC_HOUR_NOT_GUARANTEED",
+      "PROVENANCE_MANIFEST_MISSING"
+    ],
+    "reasoning": [
+      "The hourly generator requests only 729 days, materially below the five-year Phase-2 research horizon.",
+      "PL=F and PA=F are futures instruments rather than the XPT/USD and XPD/USD spot/cross-feed semantics pre-registered for Phase 2.",
+      "The cleaning function omits Open, so the stored hourly pickle cannot reproduce the pre-registered candle-body feature without fabrication.",
+      "The generator does not normalize or assert timestamps as exact UTC hours before serialization.",
+      "The pickle files are stored without an immutable source/download/timezone/schema provenance manifest."
+    ]
+  },
+  "allowed_future_use": {
+    "hourly_pickles": "Do not import into the Phase-2 H1 A/B experiment.",
+    "daily_pickles": "May be evaluated later as a separate low-frequency regime research family; they are not a substitute for H1 features.",
+    "source_code_ideas": "May be reused only as design inspiration after independent causal implementation and validation."
+  },
+  "safety": {
+    "research_only": true,
+    "frozen_live_model_mutated": false,
+    "frozen_52_feature_graph_mutated": false,
+    "future_holdout_read": false,
+    "future_holdout_scored": false,
+    "buy_sell_enabled": false,
+    "execution_enabled": false
+  }
+}
