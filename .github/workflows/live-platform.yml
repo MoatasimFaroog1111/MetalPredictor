@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "src/metal_predictor/live/**"
+      - "src/metal_predictor/microstructure/**"
       - "live_web/**"
       - "tests/test_live_platform.py"
       - "tests/test_live_market_gap.py"
@@ -11,6 +12,7 @@ on:
       - "tests/test_live_time_audit.py"
       - "tests/test_spread_profit.py"
       - "tests/test_bullionvault_quotes.py"
+      - "tests/test_microstructure_research.py"
       - "requirements-live.txt"
       - "run_live.py"
       - "docker_entrypoint_live.py"
@@ -26,6 +28,7 @@ on:
       - main
     paths:
       - "src/metal_predictor/live/**"
+      - "src/metal_predictor/microstructure/**"
       - "live_web/**"
       - "tests/test_live_platform.py"
       - "tests/test_live_market_gap.py"
@@ -33,6 +36,7 @@ on:
       - "tests/test_live_time_audit.py"
       - "tests/test_spread_profit.py"
       - "tests/test_bullionvault_quotes.py"
+      - "tests/test_microstructure_research.py"
       - "requirements-live.txt"
       - "run_live.py"
       - "docker_entrypoint_live.py"
@@ -69,9 +73,9 @@ jobs:
           python -m pip install -r requirements-live.txt
           python -m pip install -e .
       - name: Compile live package
-        run: python -m compileall -q src/metal_predictor/live run_live.py docker_entrypoint_live.py
+        run: python -m compileall -q src/metal_predictor/live src/metal_predictor/microstructure run_live.py docker_entrypoint_live.py
       - name: Run live platform tests
-        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py
+        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py tests/test_microstructure_research.py
 
   docker:
     runs-on: ubuntu-24.04
@@ -88,6 +92,7 @@ jobs:
             --name metalpredictor-live-ci \
             -e LIVE_ADMIN_TOKEN=ci-admin-token \
             -e LIVE_AUTO_COLLECT=false \
+            -e BULLIONVAULT_MICROSTRUCTURE_ENABLED=false \
             -v metalpredictor-ci-data:/data \
             -p 18000:8000 \
             metalpredictor-live:ci >/dev/null
