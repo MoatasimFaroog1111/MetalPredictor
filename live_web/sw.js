@@ -1,4 +1,4 @@
-const CACHE = 'silver-ai-shell-v3';
+const CACHE = 'silver-ai-shell-v4';
 const SHELL = [
   '/',
   '/static/styles.css',
