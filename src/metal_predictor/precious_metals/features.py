@@ -136,10 +136,8 @@ class PlatinumPalladiumCrossAssetFeatures:
 
     @staticmethod
     def _add_joint_features(out: pd.DataFrame, ts: pd.Series) -> None:
-        xpt_close = pd.to_numeric(out.get("xpt_close_usd_per_kg_internal"), errors="coerce") if "xpt_close_usd_per_kg_internal" in out else None
-        xpd_close = pd.to_numeric(out.get("xpd_close_usd_per_kg_internal"), errors="coerce") if "xpd_close_usd_per_kg_internal" in out else None
-        # Internal close columns are popped before joint features, so reconstruct the
-        # cross-metal ratio from Silver ratios. Their difference is log(XPT/XPD).
+        # log(XPT/Silver) - log(XPD/Silver) = log(XPT/XPD), so no internal
+        # provider price is needed after each auxiliary component has been projected.
         xpt_silver = pd.to_numeric(out["log_xpt_silver_ratio"], errors="coerce")
         xpd_silver = pd.to_numeric(out["log_xpd_silver_ratio"], errors="coerce")
         xpt_xpd_ratio = xpt_silver - xpd_silver
