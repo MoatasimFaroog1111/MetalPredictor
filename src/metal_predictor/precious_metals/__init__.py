@@ -6,6 +6,14 @@ from metal_predictor.precious_metals.ablation import (
     PreciousMetalsFeatureFamily,
     PreciousMetalsFeatureFamilyRegistry,
 )
+from metal_predictor.precious_metals.confirmation import (
+    CANDIDATE_FEATURES,
+    CANDIDATE_FAMILIES,
+    CANDIDATE_ID,
+    CONFIRMATION_VERSION,
+    HistoricalConfirmationPolicy,
+    candidate_fingerprint,
+)
 from metal_predictor.precious_metals.contracts import (
     HistoricalMetalSource,
     PreciousMetalInstrument,
@@ -29,6 +37,12 @@ __all__ = [
     "FamilyEvidencePolicy",
     "PreciousMetalsFeatureFamily",
     "PreciousMetalsFeatureFamilyRegistry",
+    "CANDIDATE_FEATURES",
+    "CANDIDATE_FAMILIES",
+    "CANDIDATE_ID",
+    "CONFIRMATION_VERSION",
+    "HistoricalConfirmationPolicy",
+    "candidate_fingerprint",
     "HistoricalMetalSource",
     "PreciousMetalInstrument",
     "DukascopyHistoricalMetalSource",
