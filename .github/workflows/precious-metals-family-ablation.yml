@@ -1,8 +1,6 @@
 name: Precious Metals Family Ablation
 
 on:
-  push:
-    branches: ["research/precious-metals-family-ablation-v1"]
   workflow_dispatch:
 
 permissions:
