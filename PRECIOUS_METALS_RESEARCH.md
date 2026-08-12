@@ -26,6 +26,8 @@ Dukascopy lists Platinum as `XPT.CMD/USD` and Palladium as `XPD.CMD/USD`, with o
 
 The API credential is read only from `DUKASCOPY_API_KEY`. Never commit the key.
 
+A successful source parse is **not** model-readiness. Sparse/truncated provider coverage must pass the pre-registered development coverage gate below before any estimator is fitted.
+
 ## Pre-registered candidate features
 
 For each of XPT and XPD:
@@ -53,6 +55,19 @@ Total candidate features: **43**.
 
 Changing these windows or definitions requires a new feature-version identifier and a new experiment; v1 is immutable.
 
+## Pre-registered provider-coverage gate
+
+The coverage rule is fixed before observing model-comparison results. The enhanced development dataset must satisfy all of the following:
+
+- each metal exact-current coverage over full development: at least 50%
+- each metal exact-current coverage in every purged training fold: at least 40%
+- each metal exact-current coverage in every validation fold: at least 60%
+- joint XPT+XPD exact-current coverage in every validation fold: at least 50%
+- joint exact-current rows in every purged training fold: at least 2,000
+- joint exact-current rows in every validation fold: at least 500
+
+If any gate fails, the experiment stops before fitting the baseline or enhanced model. Missing provider observations remain missing; the gate prevents an experiment that is effectively dominated by imputation from being labeled valid.
+
 ## Evaluation protocol
 
 `compare_precious_metals_features.py` compares:
@@ -68,6 +83,7 @@ A candidate result does not alter the production model automatically. Promotion 
 
 1. Configure `DUKASCOPY_API_KEY` as a repository secret.
 2. Run `Cross-Asset Platinum Palladium Research` manually.
-3. Inspect source quality artifacts first.
-4. Inspect the paired development-only comparison report.
-5. Do not score or inspect the future holdout as part of this experiment.
+3. Inspect source acquisition artifacts.
+4. Require the pre-registered provider-coverage gate to pass.
+5. Inspect the paired development-only comparison report.
+6. Do not score or inspect the future holdout as part of this experiment.
