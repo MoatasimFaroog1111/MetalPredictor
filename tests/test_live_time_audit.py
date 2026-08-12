@@ -28,17 +28,26 @@ def _snapshot(materialized_at: datetime) -> ForecastSnapshot:
     )
 
 
-def test_forecast_serialization_distinguishes_model_clock_from_publication_time() -> None:
+def test_forecast_serialization_distinguishes_reference_target_and_publication_times() -> None:
     published = datetime(2026, 8, 12, 7, 5, 12, tzinfo=timezone.utc)
     data = _snapshot(published).as_dict()
 
     assert data["decision_time_utc"] == "2026-08-12T07:00:00+00:00"
     assert data["model_clock_decision_time_utc"] == "2026-08-12T07:00:00+00:00"
     assert data["materialized_at_utc"] == "2026-08-12T07:05:12+00:00"
+
     assert data["feature_timestamp_saudi"] == "2026-08-12T09:00:00+03:00"
+    assert data["current_price_time_utc"] == "2026-08-12T07:00:00+00:00"
+    assert data["current_price_time_saudi"] == "2026-08-12T10:00:00+03:00"
+    assert data["forecast_target_time_utc"] == "2026-08-12T08:00:00+00:00"
+    assert data["forecast_target_time_saudi"] == "2026-08-12T11:00:00+03:00"
+    assert data["forecast_horizon_hours"] == 1
+
     assert data["decision_time_saudi"] == "2026-08-12T10:00:00+03:00"
     assert data["materialized_at_saudi"] == "2026-08-12T10:05:12+03:00"
     assert data["display_timezone"] == "Asia/Riyadh"
+    assert data["current_price_semantics"] == "LAST_COMPLETED_H1_CLOSE"
+    assert data["forecast_target_semantics"] == "NEXT_H1_CLOSE"
     assert data["decision_time_semantics"] == "MODEL_CLOCK_HOUR_BOUNDARY"
     assert data["materialized_at_semantics"] == "ACTUAL_FORECAST_PUBLICATION_TIME"
     assert data["publication_delay_seconds"] == 312.0
@@ -54,4 +63,6 @@ def test_repository_round_trip_preserves_materialization_time(tmp_path: Path) ->
 
     assert restored is not None
     assert restored.materialized_at_utc == published
-    assert restored.as_dict()["materialized_at_saudi"] == "2026-08-12T10:05:12.345678+03:00"
+    restored_data = restored.as_dict()
+    assert restored_data["materialized_at_saudi"] == "2026-08-12T10:05:12.345678+03:00"
+    assert restored_data["forecast_target_time_saudi"] == "2026-08-12T11:00:00+03:00"
