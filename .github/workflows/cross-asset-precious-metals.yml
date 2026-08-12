@@ -14,7 +14,6 @@ jobs:
       OMP_NUM_THREADS: '2'
       OPENBLAS_NUM_THREADS: '2'
       MKL_NUM_THREADS: '2'
-      DUKASCOPY_API_KEY: ${{ secrets.DUKASCOPY_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -32,26 +31,39 @@ jobs:
           python -m pip install -r requirements-modeling.txt
           python -m pip install -e .
 
-      - name: Run precious-metals causal, coverage, and provenance tests
-        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_precious_metals.py tests/test_precious_metals_coverage.py tests/test_precious_metals_provenance.py
-
-      - name: Require research data credential without printing it
+      - name: Run precious-metals causal, coverage, provenance, and keyless-source tests
         run: |
-          python - <<'PY'
-          import os
-          if not os.environ.get('DUKASCOPY_API_KEY', '').strip():
-              raise SystemExit('DUKASCOPY_API_KEY repository secret is not configured.')
-          print('Dukascopy research credential is configured.')
-          PY
+          pytest tests/test_pipeline.py \
+            tests/test_model_training.py \
+            tests/test_cross_asset_precious_metals.py \
+            tests/test_precious_metals_coverage.py \
+            tests/test_precious_metals_provenance.py \
+            tests/test_dukascopy_public_precious_metals.py
 
       - name: Build frozen Silver baseline development data
         run: python build_training_dataset.py
 
-      - name: Build XPT and XPD hourly research datasets
+      - name: Build keyless XPT and XPD hourly research datasets
         run: python build_precious_metals_dataset.py
 
       - name: Show source acquisition report
         run: cat data/market/precious_metals_source_report.json
+
+      - name: Assert keyless source and no synthetic fill
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('data/market/precious_metals_source_report.json').read_text())
+          assert report['source_access'] == 'KEYLESS_READ_ONLY_PUBLIC_HISTORY'
+          for item in report['instruments']:
+              assert item['authentication_required'] is False
+              assert item['source_policy']['synthetic_flat_candles'] is False
+              assert item['source_policy']['forward_fill'] is False
+              assert item['source_policy']['interpolation'] is False
+              assert item['exact_hour_rows'] == item['rows']
+          print('Keyless Dukascopy source guards: PASS')
+          PY
 
       - name: Build Silver plus pre-registered XPT/XPD candidate data
         run: python build_precious_metals_cross_asset_dataset.py
