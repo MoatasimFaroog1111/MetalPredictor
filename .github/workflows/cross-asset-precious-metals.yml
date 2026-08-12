@@ -32,8 +32,8 @@ jobs:
           python -m pip install -r requirements-modeling.txt
           python -m pip install -e .
 
-      - name: Run precious-metals causal tests
-        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_precious_metals.py
+      - name: Run precious-metals causal and coverage tests
+        run: pytest tests/test_pipeline.py tests/test_model_training.py tests/test_cross_asset_precious_metals.py tests/test_precious_metals_coverage.py
 
       - name: Require research data credential without printing it
         run: |
@@ -50,30 +50,33 @@ jobs:
       - name: Build XPT and XPD hourly research datasets
         run: python build_precious_metals_dataset.py
 
-      - name: Show source quality report
+      - name: Show source acquisition report
         run: cat data/market/precious_metals_source_report.json
 
       - name: Build Silver plus pre-registered XPT/XPD candidate data
         run: python build_precious_metals_cross_asset_dataset.py
 
-      - name: Compare on development only with frozen Ridge recipe
+      - name: Validate provider coverage then compare on development only
         run: python compare_precious_metals_features.py
 
       - name: Show paired feature report
         run: cat artifacts/cross_asset_precious_metals/precious_metals_ab_report.json
 
-      - name: Assert experiment never used future holdout or old test
+      - name: Assert experiment isolation and provider coverage
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
           report=json.loads(Path('artifacts/cross_asset_precious_metals/precious_metals_ab_report.json').read_text())
           assert report['research_policy']['test_data_read'] is False
+          assert report['coverage_gate']['status'] == 'PASS'
+          assert report['coverage_gate']['policy_fixed_before_result'] is True
           assert report['guardrails']['future_holdout_read'] is False
           assert report['guardrails']['old_test_read'] is False
           assert report['guardrails']['live_model_mutated'] is False
           assert report['guardrails']['frozen_52_feature_graph_mutated'] is False
-          print('Research isolation guards: PASS')
+          assert report['guardrails']['provider_coverage_validated_before_model_fit'] is True
+          print('Research isolation and coverage guards: PASS')
           PY
 
       - name: Upload precious-metals research artifacts
