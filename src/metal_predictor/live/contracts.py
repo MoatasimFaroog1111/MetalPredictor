@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -63,6 +63,13 @@ class ForecastSnapshot:
         model_clock = self.decision_time_utc
         published = self.materialized_at_utc
 
+        # Canonical H1 timestamps label bar STARTS. The feature bar at t becomes fully
+        # observable at t+1h; its close is therefore the reference/current model price
+        # at decision_time_utc. The frozen 1h target is the close of the NEXT H1 bar,
+        # which is observed at t+2h. Expose both user-facing instants explicitly.
+        current_price_time = model_clock
+        forecast_target_time = model_clock + timedelta(hours=1)
+
         data["feature_timestamp_utc"] = feature.isoformat()
         data["decision_time_utc"] = model_clock.isoformat()
         data["model_clock_decision_time_utc"] = model_clock.isoformat()
@@ -72,8 +79,16 @@ class ForecastSnapshot:
         data["decision_time_saudi"] = _saudi_iso(model_clock)
         data["model_clock_decision_time_saudi"] = _saudi_iso(model_clock)
         data["materialized_at_saudi"] = _saudi_iso(published) if published is not None else None
+
+        data["current_price_time_utc"] = current_price_time.isoformat()
+        data["current_price_time_saudi"] = _saudi_iso(current_price_time)
+        data["forecast_target_time_utc"] = forecast_target_time.isoformat()
+        data["forecast_target_time_saudi"] = _saudi_iso(forecast_target_time)
+        data["forecast_horizon_hours"] = 1
         data["display_timezone"] = SAUDI_TIMEZONE_NAME
 
+        data["current_price_semantics"] = "LAST_COMPLETED_H1_CLOSE"
+        data["forecast_target_semantics"] = "NEXT_H1_CLOSE"
         data["decision_time_semantics"] = "MODEL_CLOCK_HOUR_BOUNDARY"
         data["materialized_at_semantics"] = "ACTUAL_FORECAST_PUBLICATION_TIME"
         data["publication_delay_seconds"] = (

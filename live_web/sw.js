@@ -1,4 +1,4 @@
-const CACHE = 'silver-ai-shell-v1';
+const CACHE = 'silver-ai-shell-v2';
 const SHELL = ['/', '/static/styles.css', '/static/app.js', '/static/manifest.webmanifest', '/static/icon.svg'];
 
 self.addEventListener('install', event => {
