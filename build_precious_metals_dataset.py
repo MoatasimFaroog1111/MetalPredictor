@@ -10,6 +10,10 @@ from metal_predictor.precious_metals.dukascopy_public_source import (
     DukascopyPublicH1UrlPlanner,
     DukascopyPublicHistoricalMetalSource,
 )
+from metal_predictor.precious_metals.provenance import (
+    HistoricalBootstrapManifest,
+    HistoricalBootstrapProvenanceGate,
+)
 
 
 SILVER_PATH = Path("XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet")
@@ -22,7 +26,36 @@ def silver_window(path: Path = SILVER_PATH) -> tuple[pd.Timestamp, pd.Timestamp]
     return timestamps.min(), timestamps.max()
 
 
-def _write_instrument(frame: pd.DataFrame, instrument: PreciousMetalInstrument) -> dict[str, object]:
+def _provenance_manifest(
+    instrument: PreciousMetalInstrument,
+    requested_history_days: int,
+) -> HistoricalBootstrapManifest:
+    return HistoricalBootstrapManifest(
+        asset=instrument.asset,
+        provider="Dukascopy Public Historical Feed",
+        source_symbol=instrument.dukascopy_name,
+        instrument_semantics="COMMODITY_CFD_CROSS_FEED",
+        interval="1h",
+        requested_history_days=requested_history_days,
+        has_open=True,
+        has_high=True,
+        has_low=True,
+        has_close=True,
+        exact_utc_hour_guaranteed=True,
+        forward_fill_used=False,
+        interpolation_used=False,
+        provenance_manifest_embedded=True,
+        source_repository="Dukascopy public historical feed",
+        source_path="/v1/candles/hour/{instrument}/BID/{year}/{month}",
+    )
+
+
+def _write_instrument(
+    frame: pd.DataFrame,
+    instrument: PreciousMetalInstrument,
+    manifest: HistoricalBootstrapManifest,
+    provenance_assessment: dict[str, object],
+) -> dict[str, object]:
     if frame.empty:
         raise RuntimeError(f"Dukascopy returned no H1 rows for {instrument.dukascopy_name}.")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -58,6 +91,8 @@ def _write_instrument(frame: pd.DataFrame, instrument: PreciousMetalInstrument) 
                 & timestamps.dt.microsecond.eq(0)
             ).sum()
         ),
+        "provenance_manifest": manifest.as_dict(),
+        "provenance_gate": provenance_assessment,
         "source_policy": {
             "exact_timestamp_alignment": True,
             "source_gaps_preserved": True,
@@ -79,25 +114,47 @@ def _write_instrument(frame: pd.DataFrame, instrument: PreciousMetalInstrument) 
 
 def build() -> dict[str, object]:
     start, end = silver_window()
+    requested_history_days = int((end.normalize() - start.normalize()).days + 1)
+    instruments = (PLATINUM, PALLADIUM)
+    manifests = tuple(
+        _provenance_manifest(instrument, requested_history_days)
+        for instrument in instruments
+    )
+    assessments = HistoricalBootstrapProvenanceGate().validate_many(manifests)
+    assessments_by_asset = {item.asset: item.as_dict() for item in assessments}
+
     source = DukascopyPublicHistoricalMetalSource()
     reports = []
-    for instrument in (PLATINUM, PALLADIUM):
+    for instrument, manifest in zip(instruments, manifests, strict=True):
         frame = source.fetch_hourly(
             instrument,
             start.to_pydatetime(),
             end.to_pydatetime(),
         )
-        reports.append(_write_instrument(frame, instrument))
+        reports.append(
+            _write_instrument(
+                frame,
+                instrument,
+                manifest,
+                assessments_by_asset[instrument.asset],
+            )
+        )
 
     combined = {
         "status": "SOURCE_ACQUIRED_UNVALIDATED_FOR_MODEL",
         "model_readiness": "PENDING_DEVELOPMENT_COVERAGE_GATE",
         "source_access": "KEYLESS_READ_ONLY_PUBLIC_HISTORY",
+        "provenance_gate": {
+            "status": "PASS",
+            "validated_before_source_fetch": True,
+            "assessments": [item.as_dict() for item in assessments],
+        },
         "research_only": True,
         "model_mutated": False,
         "frozen_feature_graph_mutated": False,
         "future_holdout_read": False,
         "window": {"start_utc": start.isoformat(), "end_utc": end.isoformat()},
+        "requested_history_days": requested_history_days,
         "instruments": reports,
     }
     (OUTPUT_DIR / "precious_metals_source_report.json").write_text(
