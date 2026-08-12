@@ -166,15 +166,15 @@ class DukascopyHistoricalMetalSource:
     def _parse_candle(cls, row: object) -> tuple[datetime, float, float, float, float] | None:
         if not isinstance(row, Mapping):
             return None
-        timestamp_raw = cls._first(row, "timestamp", "time", "date", "start", "startTime")
-        open_raw = cls._first(row, "open", "o")
-        high_raw = cls._first(row, "high", "h")
-        low_raw = cls._first(row, "low", "l")
-        close_raw = cls._first(row, "close", "c")
         try:
+            timestamp_raw = cls._first(row, "timestamp", "time", "date", "start", "startTime")
+            open_raw = cls._first(row, "open", "openPrice", "o")
+            high_raw = cls._first(row, "high", "highPrice", "h")
+            low_raw = cls._first(row, "low", "lowPrice", "l")
+            close_raw = cls._first(row, "close", "closePrice", "c")
             ts = cls._parse_timestamp(timestamp_raw)
             prices = tuple(float(value) for value in (open_raw, high_raw, low_raw, close_raw))
-        except (TypeError, ValueError, OverflowError):
+        except (KeyError, TypeError, ValueError, OverflowError):
             return None
         if ts.minute or ts.second or ts.microsecond:
             return None
