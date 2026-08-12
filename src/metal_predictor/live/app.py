@@ -12,6 +12,8 @@ from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
+from metal_predictor.live.bullionvault_api import create_bullionvault_research_router
+from metal_predictor.live.bullionvault_quote_factory import build_bullionvault_quote_provider
 from metal_predictor.live.catchup import LiveMarketCatchUpService
 from metal_predictor.live.contracts import HourlySilverBar
 from metal_predictor.live.inference import LiveForecastOrchestrator, LivePredictionEngine
@@ -70,6 +72,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     )
     orchestrator = LiveForecastOrchestrator(repository, engine, notifier)
     source = build_live_market_source(config)
+    bullionvault_quote_provider = build_bullionvault_quote_provider(config)
     catchup = (
         LiveMarketCatchUpService(source, repository, engine, orchestrator)
         if source is not None
@@ -114,11 +117,18 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.orchestrator = orchestrator
     app.state.market_source = source
+    app.state.bullionvault_quote_provider = bullionvault_quote_provider
     app.state.catchup = catchup
     app.state.telegram = notifier
     app.state.scheduler = scheduler
 
     app.include_router(create_spread_research_router(orchestrator.latest))
+    app.include_router(
+        create_bullionvault_research_router(
+            orchestrator.latest,
+            bullionvault_quote_provider,
+        )
+    )
 
     static_dir = root / "live_web"
     if not static_dir.exists():
@@ -188,6 +198,16 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
                 "provider": config.resolved_market_provider,
                 "symbol": config.market_source_symbol,
                 "mode": config.market_source_mode,
+            },
+            "bullionvault_quote": {
+                "provider": "BullionVault",
+                "security_id": config.bullionvault_security_id,
+                "currency": config.bullionvault_currency,
+                "access_mode": config.bullionvault_resolved_access_mode,
+                "authenticated_configured": config.bullionvault_authenticated_configured,
+                "public_fallback": config.bullionvault_public_fallback,
+                "read_only": True,
+                "execution_enabled": False,
             },
             "automatic_collection": {
                 "enabled": config.auto_collection_enabled,
