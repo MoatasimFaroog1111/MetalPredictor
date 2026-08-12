@@ -37,11 +37,21 @@ Set real values only in Railway Variables/Secrets; never commit them:
 
 ```text
 LIVE_ADMIN_TOKEN=<strong-random-secret>
-TWELVEDATA_API_KEY=<secret>
-TWELVEDATA_SYMBOL=XAG/USD
+LIVE_MARKET_PROVIDER=goldapi
+GOLD_API_KEY=<secret>
+GOLD_API_SYMBOL=XAG
 LIVE_AUTO_COLLECT=true
 LIVE_COLLECTION_DELAY_MINUTES=5
 LIVE_DB_PATH=/data/live_predictions.sqlite3
+```
+
+`LIVE_MARKET_PROVIDER=auto` is also supported. In `auto` mode, a configured `GOLD_API_KEY` is preferred; if no Gold API key exists, the service can fall back to Twelve Data when `TWELVEDATA_API_KEY` is configured.
+
+Optional Twelve Data fallback:
+
+```text
+TWELVEDATA_API_KEY=<secret>
+TWELVEDATA_SYMBOL=XAG/USD
 ```
 
 For Telegram also set:
@@ -55,6 +65,14 @@ PUBLIC_BASE_URL=https://<railway-public-domain>
 
 `PORT` is read dynamically by `run_live.py`; do not hard-code an external Railway port.
 
+## Gold API free-tier operational behavior
+
+Gold API provides the completed-hour OHLC adapter used by the live service. The free plan limits OHLC/history requests, so a catch-up range intentionally requests only the **newest requested completed hour**. Older missing hours remain explicit gaps rather than being fabricated or repeatedly requested until the rate limit is exhausted.
+
+The frozen feature graph already treats missing exact-clock lags as missing values, and the sealed frozen Ridge payload applies the training-time fitted imputer/missing indicators. Therefore a restart after downtime can resume with the newest completed hour and still produce a research-only forecast while exposing the source as an operational cross-feed.
+
+Once the service is running continuously, the normal path is one completed Gold API H1 OHLC request after each UTC hour.
+
 ## First deployment verification
 
 After Railway reports the deployment healthy, verify these public read-only endpoints:
@@ -65,6 +83,14 @@ GET /api/v1/status
 GET /api/v1/model/status
 ```
 
+Expected market-source state with Gold API configured:
+
+```text
+provider = GoldAPI
+symbol = XAG
+mode = PROVIDER_H1_OHLC_LATEST_ONLY
+```
+
 Expected safety state:
 
 ```text
@@ -73,14 +99,14 @@ buy_sell_enabled = false
 research_only = true
 ```
 
-Then trigger the protected catch-up once if automatic collection has not already run:
+Then trigger the protected collection once if automatic collection has not already run:
 
 ```text
 POST /api/v1/admin/collect
 X-Admin-Token: <LIVE_ADMIN_TOKEN>
 ```
 
-The catch-up fills missing causal H1 context but does not manufacture retroactive live forecasts. Exact-clock NaNs caused by market closures remain NaN until the sealed frozen model applies its fitted training-time imputer/missing indicators.
+No source gap is forward-filled or interpolated. Exact-clock NaNs remain NaN until the sealed frozen model applies its fitted training-time imputer/missing indicators.
 
 ## Telegram activation
 
