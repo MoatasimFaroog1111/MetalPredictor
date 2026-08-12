@@ -1,3 +1,5 @@
+import { mountSpreadProfitSimulator } from '/static/components/spread-profit-simulator.js';
+
 const $ = (id) => document.getElementById(id);
 const money = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD', minimumFractionDigits:2, maximumFractionDigits:2});
 const pct = (logReturn) => `${((Math.exp(Number(logReturn)) - 1) * 100).toFixed(4)}%`;
@@ -163,6 +165,7 @@ async function refresh() {
 }
 
 $('refresh-btn').addEventListener('click', refresh);
+mountSpreadProfitSimulator();
 refresh();
 setInterval(refresh, 60_000);
 

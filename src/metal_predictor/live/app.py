@@ -20,6 +20,7 @@ from metal_predictor.live.notifications import TelegramForecastPublisher
 from metal_predictor.live.repository import SQLiteForecastRepository
 from metal_predictor.live.scheduler import HourlyCollectionScheduler
 from metal_predictor.live.settings import LiveSettings
+from metal_predictor.live.spread_api import create_spread_research_router
 
 
 class HourlyBarRequest(BaseModel):
@@ -116,6 +117,8 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     app.state.catchup = catchup
     app.state.telegram = notifier
     app.state.scheduler = scheduler
+
+    app.include_router(create_spread_research_router(orchestrator.latest))
 
     static_dir = root / "live_web"
     if not static_dir.exists():

@@ -21,7 +21,10 @@
           <p>توقع بحثي لسعر الفضة — الساعة القادمة</p>
         </div>
       </div>
-      <div class="status-pill" id="service-pill"><span></span><b>جاري الاتصال</b></div>
+      <div class="top-actions">
+        <button class="tool-button" id="spread-simulator-open" type="button">السبريد والربح</button>
+        <div class="status-pill" id="service-pill"><span></span><b>جاري الاتصال</b></div>
+      </div>
     </header>
 
     <section class="warning" role="note">
@@ -109,6 +112,122 @@
       <span id="last-refresh">—</span>
     </footer>
   </main>
+
+  <dialog class="spread-dialog" id="spread-simulator-dialog" aria-labelledby="spread-dialog-title">
+    <div class="spread-dialog-shell">
+      <div class="spread-dialog-head">
+        <div>
+          <div class="eyebrow">Research Execution Cost Simulator</div>
+          <h2 id="spread-dialog-title">السبريد والربح المتوقع</h2>
+        </div>
+        <button class="icon-button" id="spread-simulator-close" type="button" aria-label="إغلاق">×</button>
+      </div>
+
+      <div class="spread-note">
+        GoldAPI يزوّدنا بسعر مرجعي ولا يزوّد Bid/Ask قابلين للتنفيذ. لذلك السبريد هنا افتراض بحثي صريح ولا يتم اختراع سعر سوق تنفيذي.
+      </div>
+
+      <form class="spread-form" id="spread-simulator-form">
+        <label>
+          <span>السبريد الحالي USD/kg *</span>
+          <input name="currentSpread" inputmode="decimal" type="number" min="0" step="0.0001" required placeholder="مثال: 1.50" />
+        </label>
+        <label>
+          <span>السبريد المتوقع بعد ساعة</span>
+          <input name="forecastSpread" inputmode="decimal" type="number" min="0" step="0.0001" placeholder="فارغ = نفس الحالي" />
+        </label>
+        <label>
+          <span>الربح المستهدف USD</span>
+          <input name="targetProfit" inputmode="decimal" type="number" min="0" step="0.01" value="1.00" />
+        </label>
+        <label>
+          <span>تكلفة ثابتة للصفقة كاملة USD</span>
+          <input name="fixedCost" inputmode="decimal" type="number" min="0" step="0.01" value="0.00" />
+        </label>
+        <label>
+          <span>أقل كمية مسموحة kg</span>
+          <input name="minimumQuantity" inputmode="decimal" type="number" min="0.000001" step="0.001" value="0.001" />
+        </label>
+        <label>
+          <span>خطوة الكمية kg</span>
+          <input name="quantityStep" inputmode="decimal" type="number" min="0.000001" step="0.001" value="0.001" />
+        </label>
+        <button class="primary-button" id="spread-simulator-calculate" type="submit">احسب السيناريو</button>
+      </form>
+
+      <div class="spread-error" id="spread-error" hidden></div>
+
+      <div class="spread-result" id="spread-result" hidden>
+        <section class="spread-reference">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Reference Quote</div>
+              <h3>السعر المرجعي عند <span id="spread-current-time">—</span></h3>
+            </div>
+            <div class="spread-time">التوقع عند <b id="spread-target-time">—</b></div>
+          </div>
+          <div class="quote-grid">
+            <div><span>Mid</span><b id="spread-current-mid">—</b></div>
+            <div><span>بيع الآن Bid</span><b id="spread-current-bid">—</b></div>
+            <div><span>شراء الآن Ask</span><b id="spread-current-ask">—</b></div>
+            <div><span>Spread الحالي</span><b id="spread-current-width">—</b></div>
+            <div><span>Spread المتوقع</span><b id="spread-forecast-width">—</b></div>
+          </div>
+        </section>
+
+        <div class="spread-model-grid">
+          <section class="spread-model-card">
+            <div class="eyebrow">Baseline</div>
+            <h3><span id="spread-baseline-model">—</span> • <span id="spread-baseline-direction">—</span></h3>
+            <div class="quote-grid compact">
+              <div><span>Expected Mid</span><b id="spread-baseline-mid">—</b></div>
+              <div><span>بيع متوقع Bid</span><b id="spread-baseline-bid">—</b></div>
+              <div><span>شراء متوقع Ask</span><b id="spread-baseline-ask">—</b></div>
+            </div>
+            <div class="side-scenario">
+              <h4>شراء الآن → بيع بعد ساعة</h4>
+              <p>الهامش المتوقع: <b id="spread-baseline-long-margin">—</b></p>
+              <p>أقل كمية: <b id="spread-baseline-long-quantity">—</b></p>
+              <small id="spread-baseline-long-profit">—</small>
+            </div>
+            <div class="side-scenario">
+              <h4>بيع الآن → شراء بعد ساعة</h4>
+              <p>الهامش المتوقع: <b id="spread-baseline-short-margin">—</b></p>
+              <p>أقل كمية: <b id="spread-baseline-short-quantity">—</b></p>
+              <small id="spread-baseline-short-profit">—</small>
+            </div>
+          </section>
+
+          <section class="spread-model-card">
+            <div class="eyebrow">Research Challenger</div>
+            <h3><span id="spread-challenger-model">—</span> • <span id="spread-challenger-direction">—</span></h3>
+            <div class="quote-grid compact">
+              <div><span>Expected Mid</span><b id="spread-challenger-mid">—</b></div>
+              <div><span>بيع متوقع Bid</span><b id="spread-challenger-bid">—</b></div>
+              <div><span>شراء متوقع Ask</span><b id="spread-challenger-ask">—</b></div>
+            </div>
+            <div class="side-scenario">
+              <h4>شراء الآن → بيع بعد ساعة</h4>
+              <p>الهامش المتوقع: <b id="spread-challenger-long-margin">—</b></p>
+              <p>أقل كمية: <b id="spread-challenger-long-quantity">—</b></p>
+              <small id="spread-challenger-long-profit">—</small>
+            </div>
+            <div class="side-scenario">
+              <h4>بيع الآن → شراء بعد ساعة</h4>
+              <p>الهامش المتوقع: <b id="spread-challenger-short-margin">—</b></p>
+              <p>أقل كمية: <b id="spread-challenger-short-quantity">—</b></p>
+              <small id="spread-challenger-short-profit">—</small>
+            </div>
+          </section>
+        </div>
+
+        <div class="spread-safety">
+          هذا حساب بحثي للهوامش وتكلفة السبريد فقط. لا توجد توصية تداول، ولا يتم إنشاء BUY/SELL، ولا يوجد تنفيذ أو إرسال أوامر.
+        </div>
+      </div>
+    </div>
+  </dialog>
+
   <script type="module" src="/static/app.js"></script>
 </body>
 </html>
