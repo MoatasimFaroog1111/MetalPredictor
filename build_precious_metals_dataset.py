@@ -32,7 +32,8 @@ def _write_instrument(frame: pd.DataFrame, instrument: PreciousMetalInstrument) 
 
     timestamps = pd.to_datetime(frame["timestamp_utc"], utc=True)
     report = {
-        "status": "PASS",
+        "status": "SOURCE_PARSE_COMPLETE_UNVALIDATED_FOR_MODEL",
+        "model_readiness": "PENDING_DEVELOPMENT_COVERAGE_GATE",
         "asset": instrument.asset,
         "source_provider": "Dukascopy",
         "source_symbol": instrument.dukascopy_name,
@@ -53,6 +54,7 @@ def _write_instrument(frame: pd.DataFrame, instrument: PreciousMetalInstrument) 
             "interpolation": False,
             "nearest_timestamp_match": False,
             "conflicting_duplicate_hours": "fail_closed",
+            "sparse_provider_coverage": "must_pass_pre_registered_fold_coverage_gate_before_model_fit",
         },
         "outputs": [str(parquet_path), str(csv_path)],
     }
@@ -78,7 +80,8 @@ def build() -> dict[str, object]:
         reports.append(_write_instrument(frame, instrument))
 
     combined = {
-        "status": "PASS",
+        "status": "SOURCE_ACQUIRED_UNVALIDATED_FOR_MODEL",
+        "model_readiness": "PENDING_DEVELOPMENT_COVERAGE_GATE",
         "research_only": True,
         "model_mutated": False,
         "frozen_feature_graph_mutated": False,
