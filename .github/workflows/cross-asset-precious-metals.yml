@@ -49,15 +49,18 @@ jobs:
       - name: Show source acquisition report
         run: cat data/market/precious_metals_source_report.json
 
-      - name: Assert keyless source and no synthetic fill
+      - name: Assert keyless source, provenance, and no synthetic fill
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
           report=json.loads(Path('data/market/precious_metals_source_report.json').read_text())
           assert report['source_access'] == 'KEYLESS_READ_ONLY_PUBLIC_HISTORY'
+          assert report['provenance_gate']['status'] == 'PASS'
+          assert report['provenance_gate']['validated_before_source_fetch'] is True
           for item in report['instruments']:
               assert item['authentication_required'] is False
+              assert item['provenance_gate']['status'] == 'PASS'
               assert item['source_policy']['synthetic_flat_candles'] is False
               assert item['source_policy']['forward_fill'] is False
               assert item['source_policy']['interpolation'] is False
