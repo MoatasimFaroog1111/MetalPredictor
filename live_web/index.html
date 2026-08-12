@@ -31,7 +31,7 @@
 
     <section class="hero-grid">
       <article class="card price-card">
-        <div class="eyebrow">السعر الحالي</div>
+        <div class="eyebrow">آخر سعر مؤكد</div>
         <div class="price" id="current-price">—</div>
         <div class="unit">USD / kg</div>
         <div class="meta" id="feature-time">لا يوجد Forecast حي حتى الآن</div>
@@ -46,6 +46,7 @@
           <div class="direction neutral" id="baseline-direction">—</div>
         </div>
         <div class="forecast-price" id="baseline-price">—</div>
+        <div class="metric-row"><span>السعر المتوقع عند</span><b id="baseline-target-time">—</b></div>
         <div class="metric-row"><span>العائد المتوقع 1h</span><b id="baseline-return">—</b></div>
       </article>
 
@@ -58,6 +59,7 @@
           <div class="direction neutral" id="challenger-direction">—</div>
         </div>
         <div class="forecast-price" id="challenger-price">—</div>
+        <div class="metric-row"><span>السعر المتوقع عند</span><b id="challenger-target-time">—</b></div>
         <div class="metric-row"><span>العائد المتوقع 1h</span><b id="challenger-return">—</b></div>
       </article>
     </section>
@@ -96,7 +98,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>الوقت UTC</th><th>السعر</th><th>Baseline</th><th>Research</th><th>الجودة</th></tr></thead>
+          <thead><tr><th>الفترة (السعودية)</th><th>السعر المرجعي</th><th>Baseline</th><th>Research</th><th>الجودة</th></tr></thead>
           <tbody id="history-body"><tr><td colspan="5" class="muted">لا توجد بيانات بعد.</td></tr></tbody>
         </table>
       </div>
