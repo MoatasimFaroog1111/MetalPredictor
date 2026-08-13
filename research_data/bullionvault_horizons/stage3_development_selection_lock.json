@@ -1,0 +1,32 @@
+{
+  "lock_version": "bullionvault-multi-horizon-stage3-selection-lock-v1",
+  "stage3_version": "bullionvault-multi-horizon-development-selection-v1",
+  "development_selection_locked": true,
+  "source_code_commit": "a9b014a1b92495259447e02506513d6677498fa5",
+  "preregistration_fingerprint_sha256": "fcf19e14ef55932093cd5406034700469b1e04723ac3d11b6c543345cb33b1d6",
+  "workflow_run_id": 31697106962,
+  "workflow_artifact_id": 9179752084,
+  "workflow_artifact_digest": "sha256:20b2cbb61ed5e37fda95d562b9162fdab8e68784f236eabbd1cf4a71232795d4",
+  "full_report_sha256": "279b824c0775710b9b60a03a39564519e5ed728a54caca4febcefd71a24586f9",
+  "performance_scope": "DEVELOPMENT_ONLY",
+  "historical_test_metrics_read": false,
+  "historical_test_predictions_computed": false,
+  "horizons": {
+    "4h": {"selected_id": "random_walk_zero_return", "selected_kind": "BASELINE", "candidate_gate_pass_count": 0, "historical_confirmation_authorized": false},
+    "12h": {"selected_id": "random_walk_zero_return", "selected_kind": "BASELINE", "candidate_gate_pass_count": 0, "historical_confirmation_authorized": false},
+    "1d": {"state": "DATA_PENDING", "selected_id": null, "historical_confirmation_authorized": false},
+    "2d": {"selected_id": "random_walk_zero_return", "selected_kind": "BASELINE", "candidate_gate_pass_count": 0, "historical_confirmation_authorized": false},
+    "30d": {"selected_id": "random_walk_zero_return", "selected_kind": "BASELINE", "candidate_gate_pass_count": 0, "historical_confirmation_authorized": false}
+  },
+  "guardrails": {
+    "edge_status": "NOT_PROVEN",
+    "research_only": true,
+    "buy_sell_enabled": false,
+    "execution_enabled": false,
+    "live_model_mutated": false,
+    "frozen_52_feature_graph_mutated": false,
+    "future_holdout_read": false,
+    "shadow62_mutated": false,
+    "automatic_live_promotion": false
+  }
+}
