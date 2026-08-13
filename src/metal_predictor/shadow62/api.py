@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from metal_predictor.shadow62.contracts import ShadowRepository
 from metal_predictor.shadow62.service import Shadow62Service
@@ -13,6 +13,8 @@ def create_shadow62_research_router(
     enabled: bool,
     delay_minutes: int,
 ) -> APIRouter:
+    """Expose operational status only; prediction values stay sealed during holdout."""
+
     router = APIRouter(prefix="/api/v1/research/shadow62", tags=["research-shadow62"])
 
     @router.get("/status")
@@ -24,6 +26,8 @@ def create_shadow62_research_router(
                 "delay_minutes": delay_minutes,
                 "prediction_count": repository.prediction_count(),
                 "outcome_count": repository.outcome_count(),
+                "prediction_values_exposed": False,
+                "outcome_values_exposed": False,
                 "performance_metrics_available": False,
                 "interim_scoring_enabled": False,
                 "edge_status": "NOT_PROVEN",
@@ -35,13 +39,8 @@ def create_shadow62_research_router(
             **service.status(),
             "collection_enabled": enabled,
             "delay_minutes": delay_minutes,
+            "prediction_values_exposed": False,
+            "outcome_values_exposed": False,
         }
-
-    @router.get("/latest")
-    def latest() -> dict[str, object]:
-        snapshot = repository.latest_prediction()
-        if snapshot is None:
-            raise HTTPException(status_code=404, detail="No shadow62 observation has been recorded yet.")
-        return snapshot.as_dict()
 
     return router
