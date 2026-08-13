@@ -13,6 +13,7 @@ RUN python -m pip install --no-cache-dir -r requirements-live.txt \
     && python -m pip install --no-cache-dir .
 
 COPY forward_holdout ./forward_holdout
+COPY shadow_holdout ./shadow_holdout
 COPY XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet ./XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet
 COPY live_web ./live_web
 COPY run_live.py ./run_live.py

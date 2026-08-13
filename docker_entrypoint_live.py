@@ -9,6 +9,7 @@ import sys
 APP_USER = "appuser"
 DEFAULT_DB_PATH = Path("/data/live_predictions.sqlite3")
 DEFAULT_MICROSTRUCTURE_DB_PATH = Path("/data/bullionvault_microstructure.sqlite3")
+DEFAULT_SHADOW62_DB_PATH = Path("/data/xpt_xpd_shadow62.sqlite3")
 DEFAULT_VOLUME_PATH = Path("/data")
 
 
@@ -37,6 +38,7 @@ def _prepare_runtime_storage(uid: int, gid: int) -> None:
             "BULLIONVAULT_MICROSTRUCTURE_DB_PATH",
             DEFAULT_MICROSTRUCTURE_DB_PATH,
         ),
+        _resolve_runtime_path("SHADOW62_DB_PATH", DEFAULT_SHADOW62_DB_PATH),
     }
     volume_path = _resolve_runtime_path("RAILWAY_VOLUME_MOUNT_PATH", DEFAULT_VOLUME_PATH)
     volume_path.mkdir(parents=True, exist_ok=True)

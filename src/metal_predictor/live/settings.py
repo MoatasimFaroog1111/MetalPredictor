@@ -43,6 +43,9 @@ class LiveSettings:
     bullionvault_microstructure_database_path: Path = Path(
         "runtime/bullionvault_microstructure.sqlite3"
     )
+    shadow62_enabled: bool = False
+    shadow62_delay_minutes: int = 8
+    shadow62_database_path: Path = Path("runtime/xpt_xpd_shadow62.sqlite3")
     telegram_bot_token: str = ""
     telegram_webhook_secret: str = ""
     telegram_allowed_chat_ids: tuple[str, ...] = ()
@@ -100,6 +103,8 @@ class LiveSettings:
             raise ValueError(
                 "BULLIONVAULT_MICROSTRUCTURE_INTERVAL_SECONDS must be between 30 and 3600."
             )
+        if not 1 <= int(self.shadow62_delay_minutes) <= 30:
+            raise ValueError("SHADOW62_DELAY_MINUTES must be between 1 and 30.")
 
     @classmethod
     def from_environment(cls, repository_root: Path | None = None) -> "LiveSettings":
@@ -150,6 +155,11 @@ class LiveSettings:
                     "BULLIONVAULT_MICROSTRUCTURE_DB_PATH",
                     "runtime/bullionvault_microstructure.sqlite3",
                 )
+            ).expanduser(),
+            shadow62_enabled=_environment_bool("SHADOW62_ENABLED", False),
+            shadow62_delay_minutes=int(os.getenv("SHADOW62_DELAY_MINUTES", "8")),
+            shadow62_database_path=Path(
+                os.getenv("SHADOW62_DB_PATH", "runtime/xpt_xpd_shadow62.sqlite3")
             ).expanduser(),
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
             telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip(),
