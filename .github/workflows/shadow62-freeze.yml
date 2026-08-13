@@ -1,0 +1,121 @@
+name: XPT XPD Shadow62 Freeze
+
+on:
+  push:
+    branches: ["research/xpt-xpd-shadow-62-v1"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: shadow62-freeze-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freeze-shadow62:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+
+      - name: Run causal and shadow isolation tests
+        run: |
+          pytest tests/test_pipeline.py \
+            tests/test_model_training.py \
+            tests/test_cross_asset_precious_metals.py \
+            tests/test_precious_metals_coverage.py \
+            tests/test_precious_metals_provenance.py \
+            tests/test_dukascopy_public_precious_metals.py \
+            tests/test_precious_metals_confirmation.py \
+            tests/test_shadow62.py
+
+      - name: Build frozen Silver historical feature data
+        run: python build_training_dataset.py
+
+      - name: Build keyless XPT and XPD H1 research data
+        run: python build_precious_metals_dataset.py
+
+      - name: Build locked precious-metals feature data
+        run: python build_precious_metals_cross_asset_dataset.py
+
+      - name: Freeze confirmed 62-feature candidate without rescoring old Test
+        run: python freeze_shadow62_candidate.py
+
+      - name: Assert shadow freeze protocol and isolation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('shadow_holdout/model_freeze_report.json').read_text())
+          manifest = json.loads(Path('shadow_holdout/freeze_manifest.json').read_text())
+          original = json.loads(Path('forward_holdout/freeze_manifest.json').read_text())
+
+          assert report['status'] == 'PASS'
+          assert report['freeze_id'] == 'xpt-xpd-shadow-62-v1-20260814'
+          assert report['feature_count'] == 62
+          assert report['candidate_feature_count'] == 10
+          assert report['historical_test_rescored'] is False
+          assert report['future_holdout_read'] is False
+          assert report['performance_metrics_computed'] is False
+          assert report['live_model_mutated'] is False
+          assert report['max_prediction_equivalence_error'] <= 1e-12
+
+          assert manifest['protocol_version'] == 'xpt-xpd-shadow-holdout-v1'
+          assert manifest['candidate_id'] == 'xpt-xpd-candle-shape-own-returns-v1'
+          assert manifest['candidate_feature_fingerprint_sha256'] == '41b8089018654b8f722bd01b129031a49960c2054c6c6e64f442cef0c65be329'
+          assert manifest['candidate_feature_count'] == 10
+          assert manifest['total_model_feature_count'] == 62
+          assert manifest['holdout_first_feature_bar_start_utc'] == '2026-08-14T00:00:00Z'
+          assert manifest['holdout_last_feature_bar_start_exclusive_utc'] == '2027-02-10T00:00:00Z'
+          assert manifest['earliest_final_score_utc'] == '2027-02-10T02:00:00Z'
+          assert manifest['fixed_window_days'] == 180
+          assert manifest['minimum_exact_hour_outcomes'] == 2500
+          assert manifest['historical_confirmation']['status'] == 'CONFIRMED'
+          assert manifest['historical_confirmation']['historical_test_rescored_during_shadow_freeze'] is False
+          assert manifest['final_score_rules']['no_interim_performance_metrics'] is True
+          assert manifest['final_score_rules']['final_scorer_not_implemented_before_holdout_end'] is True
+          assert manifest['guardrails']['edge_status'] == 'NOT_PROVEN'
+          assert manifest['guardrails']['live_model_mutated'] is False
+          assert manifest['guardrails']['frozen_52_feature_graph_mutated'] is False
+          assert manifest['guardrails']['future_holdout_read'] is False
+          assert manifest['guardrails']['interim_scoring_enabled'] is False
+          assert manifest['models']['baseline']['path'] == original['models']['benchmark']['path']
+          assert manifest['models']['baseline']['payload_sha256'] == original['models']['benchmark']['payload_sha256']
+          print('Shadow62 freeze and scientific isolation guards: PASS')
+          PY
+
+      - name: Commit immutable shadow freeze artifacts
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shadow_holdout/freeze_manifest.json \
+                  shadow_holdout/model_freeze_report.json \
+                  shadow_holdout/models/xpt_xpd_62_ridge_alpha_100.json
+          if git diff --cached --quiet; then
+            echo "Shadow62 freeze artifacts already match the locked protocol."
+          else
+            git commit -m "Freeze XPT/XPD shadow62 candidate artifact [skip ci]"
+            git push origin HEAD:research/xpt-xpd-shadow-62-v1
+          fi
