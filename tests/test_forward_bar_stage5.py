@@ -25,6 +25,8 @@ def _bar(
     count = max(2, min(expected, round(expected * coverage)))
     actual_coverage = count / expected
     end = start + timedelta(seconds=interval)
+    high = max(2110.0, close + 5.0)
+    low = min(2090.0, close - 5.0)
     return ForwardBar(
         horizon_key=key,
         interval_seconds=interval,
@@ -34,8 +36,8 @@ def _bar(
         security_id="AGXLN",
         currency="USD",
         open_mid_usd_per_kg=2095.0,
-        high_mid_usd_per_kg=2110.0,
-        low_mid_usd_per_kg=2090.0,
+        high_mid_usd_per_kg=high,
+        low_mid_usd_per_kg=low,
         close_mid_usd_per_kg=close,
         open_bid_usd_per_kg=2094.0,
         close_bid_usd_per_kg=close - 1.0,
