@@ -5,11 +5,12 @@ import os
 import uvicorn
 
 from metal_predictor.live.app import create_app
+from metal_predictor.live.forward_bar_runtime import install_forward_bar_runtime
 from metal_predictor.live.shadow62_runtime import install_shadow62_runtime
 
 
 if __name__ == "__main__":
-    app = install_shadow62_runtime(create_app())
+    app = install_forward_bar_runtime(install_shadow62_runtime(create_app()))
     uvicorn.run(
         app,
         host=os.getenv("HOST", "0.0.0.0"),
