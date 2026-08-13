@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from fastapi import FastAPI
 import numpy as np
 import pandas as pd
 
 from metal_predictor.alignment import ExactTimestampAligner
 from metal_predictor.core import ColumnConfig
 from metal_predictor.live.contracts import HourlySilverBar
+from metal_predictor.live.settings import LiveSettings
+from metal_predictor.live.shadow62_runtime import install_shadow62_runtime
 from metal_predictor.precious_metals.confirmation import CANDIDATE_FEATURES, CANDIDATE_ID
 from metal_predictor.precious_metals.features import PlatinumPalladiumCrossAssetFeatures
 from metal_predictor.shadow62.contracts import (
@@ -202,3 +205,22 @@ def test_shadow_scheduler_runs_at_fixed_delay_after_hour() -> None:
 
     assert scheduler.seconds_until_next_run(before) == 60.0
     assert scheduler.seconds_until_next_run(after) == 59 * 60.0
+
+
+def test_shadow_runtime_is_disabled_by_default_and_prediction_values_are_sealed(tmp_path) -> None:
+    app = FastAPI()
+    app.state.settings = LiveSettings(
+        repository_root=tmp_path,
+        shadow62_database_path=tmp_path / "shadow.sqlite3",
+    )
+    app.state.repository = object()
+
+    installed = install_shadow62_runtime(app)
+    paths = {route.path for route in installed.routes}
+
+    assert installed is app
+    assert installed.state.shadow62_engine is None
+    assert installed.state.shadow62_service is None
+    assert installed.state.shadow62_scheduler is None
+    assert "/api/v1/research/shadow62/status" in paths
+    assert "/api/v1/research/shadow62/latest" not in paths
