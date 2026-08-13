@@ -5,6 +5,8 @@ on:
     paths:
       - "src/metal_predictor/live/**"
       - "src/metal_predictor/microstructure/**"
+      - "src/metal_predictor/shadow62/**"
+      - "shadow_holdout/**"
       - "live_web/**"
       - "tests/test_live_platform.py"
       - "tests/test_live_market_gap.py"
@@ -13,6 +15,7 @@ on:
       - "tests/test_spread_profit.py"
       - "tests/test_bullionvault_quotes.py"
       - "tests/test_microstructure_research.py"
+      - "tests/test_shadow62.py"
       - "requirements-live.txt"
       - "run_live.py"
       - "docker_entrypoint_live.py"
@@ -29,6 +32,8 @@ on:
     paths:
       - "src/metal_predictor/live/**"
       - "src/metal_predictor/microstructure/**"
+      - "src/metal_predictor/shadow62/**"
+      - "shadow_holdout/**"
       - "live_web/**"
       - "tests/test_live_platform.py"
       - "tests/test_live_market_gap.py"
@@ -37,6 +42,7 @@ on:
       - "tests/test_spread_profit.py"
       - "tests/test_bullionvault_quotes.py"
       - "tests/test_microstructure_research.py"
+      - "tests/test_shadow62.py"
       - "requirements-live.txt"
       - "run_live.py"
       - "docker_entrypoint_live.py"
@@ -73,9 +79,9 @@ jobs:
           python -m pip install -r requirements-live.txt
           python -m pip install -e .
       - name: Compile live package
-        run: python -m compileall -q src/metal_predictor/live src/metal_predictor/microstructure run_live.py docker_entrypoint_live.py
+        run: python -m compileall -q src/metal_predictor/live src/metal_predictor/microstructure src/metal_predictor/shadow62 run_live.py docker_entrypoint_live.py
       - name: Run live platform tests
-        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py tests/test_microstructure_research.py
+        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py tests/test_microstructure_research.py tests/test_shadow62.py
 
   docker:
     runs-on: ubuntu-24.04
@@ -93,6 +99,7 @@ jobs:
             -e LIVE_ADMIN_TOKEN=ci-admin-token \
             -e LIVE_AUTO_COLLECT=false \
             -e BULLIONVAULT_MICROSTRUCTURE_ENABLED=false \
+            -e SHADOW62_ENABLED=false \
             -v metalpredictor-ci-data:/data \
             -p 18000:8000 \
             metalpredictor-live:ci >/dev/null
@@ -110,6 +117,7 @@ jobs:
             sleep 1
           done
           test -s health.json
+          curl -fsS http://127.0.0.1:18000/api/v1/research/shadow62/status > shadow62.json
           python - <<'PY'
           import json
           from pathlib import Path
@@ -118,6 +126,14 @@ jobs:
           assert payload["status"] == "ok"
           assert payload["edge_status"] == "NOT_PROVEN"
           assert payload["buy_sell_enabled"] is False
+
+          shadow = json.loads(Path("shadow62.json").read_text())
+          assert shadow["collection_enabled"] is False
+          assert shadow["performance_metrics_available"] is False
+          assert shadow["interim_scoring_enabled"] is False
+          assert shadow["edge_status"] == "NOT_PROVEN"
+          assert shadow["live_model_mutated"] is False
+          assert shadow["frozen_52_feature_graph_mutated"] is False
           PY
 
           test "$(docker exec metalpredictor-live-ci sh -c "awk '/^Uid:/{print \$2}' /proc/1/status")" = "10001"
