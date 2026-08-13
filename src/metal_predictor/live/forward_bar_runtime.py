@@ -4,10 +4,14 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 
 from metal_predictor.forward_bars.api import create_forward_bar_research_router
+from metal_predictor.forward_bars.contracts import FORWARD_HORIZON_SECONDS
 from metal_predictor.forward_bars.factory import ForwardBarFactory
+from metal_predictor.forward_bars.forecast_api import create_multi_horizon_forecast_router
+from metal_predictor.forward_bars.forecasting import MultiHorizonBaselineForecastService
 from metal_predictor.forward_bars.repository import SQLiteForwardBarRepository
 from metal_predictor.forward_bars.scheduler import ForwardBarMaterializationScheduler
 from metal_predictor.forward_bars.settings import ForwardBarSettings
@@ -34,6 +38,7 @@ def install_forward_bar_runtime(app: FastAPI) -> FastAPI:
         close_delay_seconds=cfg.close_delay_seconds,
         max_buckets_per_cycle=cfg.max_buckets_per_cycle,
     )
+    forecast_service = MultiHorizonBaselineForecastService(repository)
     scheduler = (
         ForwardBarMaterializationScheduler(
             factory, interval_seconds=cfg.materialization_interval_seconds
@@ -44,6 +49,7 @@ def install_forward_bar_runtime(app: FastAPI) -> FastAPI:
     app.state.forward_bar_repository = repository
     app.state.forward_bar_factory = factory
     app.state.forward_bar_scheduler = scheduler
+    app.state.multi_horizon_forecast_service = forecast_service
     app.include_router(
         create_forward_bar_research_router(
             repository,
@@ -56,6 +62,17 @@ def install_forward_bar_runtime(app: FastAPI) -> FastAPI:
             currency=live.bullionvault_currency,
         )
     )
+    app.include_router(create_multi_horizon_forecast_router(forecast_service))
+
+    static_dir = root / "live_web"
+
+    @app.get("/forecast/{horizon_key}", include_in_schema=False)
+    def multi_horizon_forecast_page(horizon_key: str) -> FileResponse:
+        key = horizon_key.strip().lower()
+        if key not in FORWARD_HORIZON_SECONDS:
+            raise HTTPException(status_code=404, detail="Unknown forecast horizon.")
+        return FileResponse(static_dir / "forecast.html")
+
     if scheduler is None:
         return app
 
