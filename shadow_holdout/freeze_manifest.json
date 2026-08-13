@@ -3,7 +3,7 @@
   "freeze_id": "xpt-xpd-shadow-62-v1-20260814",
   "protocol_version": "xpt-xpd-shadow-holdout-v1",
   "protocol_predeclared_utc": "2026-08-13T06:34:00Z",
-  "research_code_cutoff_commit": "b709d680cfeac13cba77290ed01682e24cb08c51",
+  "research_code_cutoff_commit": "ac8e85dbd763e3e5112c0812fe949a71f434e02f",
   "candidate_id": "xpt-xpd-candle-shape-own-returns-v1",
   "candidate_families": [
     "candle_shape",
@@ -71,7 +71,7 @@
       "name": "ridge_alpha_100",
       "candidate_id": "xpt-xpd-candle-shape-own-returns-v1",
       "path": "shadow_holdout/models/xpt_xpd_62_ridge_alpha_100.json",
-      "payload_sha256": "c8fbfd194c94ff99474d9394736442c684224a10fd1b38b0a06dafb15f1f2e31",
+      "payload_sha256": "093f6f205c4eb1e878d8111cd9d2b6f52c61d6987dd7348fcb4419e010e942b9",
       "feature_count": 62,
       "role": "research-only shadow candidate"
     }

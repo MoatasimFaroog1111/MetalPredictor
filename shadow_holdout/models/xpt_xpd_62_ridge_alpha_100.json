@@ -488,10 +488,10 @@
   "training_last_target_timestamp_utc": "2026-08-07T21:00:00+00:00",
   "training_scope": "historical Train+Validation+the already-confirmed one-shot historical Test; formal future holdout and shadow holdout excluded",
   "source_dataset_git_blob_sha": "9b95fcc5aa2679208c6b5c44c830ce6b1eaa5829",
-  "research_code_cutoff_commit": "b709d680cfeac13cba77290ed01682e24cb08c51",
+  "research_code_cutoff_commit": "ac8e85dbd763e3e5112c0812fe949a71f434e02f",
   "target": "target_log_return_1h",
   "prediction_semantics": "next exact-hour XAG/USD log return",
-  "model_payload_sha256": "c8fbfd194c94ff99474d9394736442c684224a10fd1b38b0a06dafb15f1f2e31",
+  "model_payload_sha256": "093f6f205c4eb1e878d8111cd9d2b6f52c61d6987dd7348fcb4419e010e942b9",
   "candidate_id": "xpt-xpd-candle-shape-own-returns-v1",
   "candidate_families": [
     "candle_shape",
