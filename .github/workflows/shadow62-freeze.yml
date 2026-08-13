@@ -36,6 +36,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
           python -m pip install -r requirements-modeling.txt
+          python -m pip install -r requirements-live.txt
           python -m pip install -e .
 
       - name: Run causal and shadow isolation tests
