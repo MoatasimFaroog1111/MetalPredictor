@@ -1,0 +1,158 @@
+{
+  "baseline": {
+    "baseline_id": "random_walk_zero_return",
+    "predicted_close": "current_close_usd_per_kg",
+    "predicted_log_return": 0.0
+  },
+  "candidates": [
+    {
+      "candidate_id": "ridge_alpha_10",
+      "estimator": "sklearn.linear_model.Ridge",
+      "parameters": {
+        "alpha": 10.0
+      },
+      "preprocessing": [
+        "StandardScaler(train_only)"
+      ]
+    },
+    {
+      "candidate_id": "huber_v1",
+      "estimator": "sklearn.linear_model.HuberRegressor",
+      "parameters": {
+        "alpha": 0.0001,
+        "epsilon": 1.35,
+        "max_iter": 1000
+      },
+      "preprocessing": [
+        "StandardScaler(train_only)"
+      ]
+    },
+    {
+      "candidate_id": "elastic_net_v1",
+      "estimator": "sklearn.linear_model.ElasticNet",
+      "parameters": {
+        "alpha": 0.0005,
+        "l1_ratio": 0.2,
+        "max_iter": 10000,
+        "selection": "cyclic"
+      },
+      "preprocessing": [
+        "StandardScaler(train_only)"
+      ]
+    }
+  ],
+  "development_selection_gate": {
+    "candidate_must_beat_random_walk_mae": true,
+    "directional_accuracy_delta_minimum": -0.02,
+    "fold_count": 4,
+    "if_no_candidate_passes": "RETAIN_RANDOM_WALK_BASELINE",
+    "mae_improvement_ci": 0.95,
+    "mae_improvement_ci_lower_must_be_positive": true,
+    "minimum_better_folds": 3,
+    "paired_block_bootstrap_block_length_rows": 4,
+    "paired_block_bootstrap_iterations": 5000,
+    "paired_block_bootstrap_seed": 20260813,
+    "primary_metric": "MAE(target_log_return)",
+    "probability_candidate_mae_better_minimum": 0.9833333333333333,
+    "probability_note": "Bootstrap probability is descriptive evidence, not a classical p-value; the high threshold is preregistered to account conservatively for three candidates.",
+    "secondary_metric": "directional_accuracy",
+    "tie_break_order": [
+      "ridge_alpha_10",
+      "huber_v1",
+      "elastic_net_v1"
+    ],
+    "winner_rule": "largest development OOF MAE improvement among candidates that pass all gates"
+  },
+  "features": {
+    "causal_only": true,
+    "feature_columns": [
+      "log_return_1",
+      "log_return_2",
+      "log_return_3",
+      "log_return_6",
+      "range_pct",
+      "close_location",
+      "rolling_return_mean_3",
+      "rolling_return_std_3",
+      "rolling_return_mean_6",
+      "rolling_return_std_6",
+      "rolling_range_mean_3",
+      "rolling_range_mean_6"
+    ],
+    "feature_count": 12,
+    "feature_fingerprint_sha256": "5ad621a8b432f874566b115887200e0008a8fe5e4bba207a689894b5de242043",
+    "feature_set_version": "bullionvault-hlc-causal-features-v1",
+    "max_lookback_bars": 6,
+    "no_backward_fill": true,
+    "no_forward_fill": true,
+    "no_interpolation": true,
+    "no_open_fabrication": true,
+    "no_resampling": true
+  },
+  "guardrails": {
+    "buy_sell_enabled": false,
+    "edge_status": "NOT_PROVEN",
+    "execution_enabled": false,
+    "frozen_52_feature_graph_mutated": false,
+    "future_holdout_read": false,
+    "live_model_mutated": false,
+    "research_only": true,
+    "shadow62_mutated": false
+  },
+  "locked_historical_confirmation_gate": {
+    "candidate_must_beat_random_walk_mae": true,
+    "directional_accuracy_delta_minimum": -0.02,
+    "failure_action": "DO_NOT_PROMOTE; NEW_VERSION_AND_NEW_FORWARD_SHADOW_REQUIRED",
+    "mae_improvement_ci": 0.95,
+    "mae_improvement_ci_lower_must_be_positive": true,
+    "paired_block_bootstrap_block_length_rows": 4,
+    "paired_block_bootstrap_iterations": 5000,
+    "paired_block_bootstrap_seed": 20260814,
+    "post_test_feature_or_hyperparameter_tuning_allowed": false,
+    "primary_metric": "MAE(target_log_return)",
+    "probability_candidate_mae_better_minimum": 0.95,
+    "test_read_policy": "READ_ONCE_AFTER_CANDIDATE_AND_FEATURE_SET_ARE_LOCKED"
+  },
+  "preregistration_version": "bullionvault-multi-horizon-model-selection-v1",
+  "scope": {
+    "blocked_horizons": {
+      "1d": "DATA_PENDING"
+    },
+    "calendar_or_hour_of_day_features_allowed": false,
+    "cross_horizon_pooling": false,
+    "historical_source": "BullionVault Chart Export HLC",
+    "horizons": [
+      "4h",
+      "12h",
+      "2d",
+      "30d"
+    ],
+    "one_model_artifact_per_horizon": true,
+    "timestamp_semantics": "UNVERIFIED_EXPORT_CLIENT_TIMEZONE"
+  },
+  "stage2_execution": {
+    "create_ui_pages": false,
+    "fit_candidate_models": false,
+    "performance_metrics_computed": false,
+    "publish_forecasts": false,
+    "read_locked_historical_test_metrics": false
+  },
+  "target": {
+    "baseline_reconstruction": "predicted_close = current_close * exp(predicted_log_return)",
+    "column": "target_log_return",
+    "semantics": "log(next_source_bar_close / current_source_bar_close)",
+    "target_timestamp": "exactly one registered source interval after feature timestamp",
+    "target_version": "next-source-bar-log-return-v1"
+  },
+  "walk_forward": {
+    "expanding_train": true,
+    "final_historical_test_fraction": 0.2,
+    "fold_count": 4,
+    "minimum_final_test_rows": 30,
+    "minimum_train_rows": 60,
+    "minimum_validation_rows": 15,
+    "model_selection_uses_historical_test": false,
+    "preprocessing_fit_train_only": true,
+    "purge_bars": 1
+  }
+}

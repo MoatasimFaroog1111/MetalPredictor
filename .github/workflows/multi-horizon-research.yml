@@ -6,15 +6,19 @@ on:
       - "src/metal_predictor/multi_horizon/**"
       - "research_data/bullionvault_horizons/**"
       - "tests/test_multi_horizon_stage1.py"
+      - "tests/test_multi_horizon_stage2.py"
+      - "build_multi_horizon_stage2.py"
       - "MULTI_HORIZON_RESEARCH.md"
       - ".github/workflows/multi-horizon-research.yml"
   push:
     branches:
-      - "research/bullionvault-multi-horizon-stage1"
+      - "research/bullionvault-multi-horizon-stage2"
     paths:
       - "src/metal_predictor/multi_horizon/**"
       - "research_data/bullionvault_horizons/**"
       - "tests/test_multi_horizon_stage1.py"
+      - "tests/test_multi_horizon_stage2.py"
+      - "build_multi_horizon_stage2.py"
       - "MULTI_HORIZON_RESEARCH.md"
       - ".github/workflows/multi-horizon-research.yml"
 
@@ -22,7 +26,7 @@ permissions:
   contents: read
 
 jobs:
-  stage1:
+  stage2:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -39,6 +43,34 @@ jobs:
           python -m pip install -e .
           python -m pip install pytest
       - name: Compile isolated module
-        run: python -m compileall -q src/metal_predictor/multi_horizon
-      - name: Verify provenance and guardrails
-        run: python -m pytest tests/test_multi_horizon_stage1.py
+        run: python -m compileall -q src/metal_predictor/multi_horizon build_multi_horizon_stage2.py
+      - name: Verify Stage 1 provenance and Stage 2 causality
+        run: |
+          python -m pytest tests/test_multi_horizon_stage1.py tests/test_multi_horizon_stage2.py
+      - name: Build Stage 2 dataset and split report without fitting models
+        run: python build_multi_horizon_stage2.py
+      - name: Assert no performance metrics were computed
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(
+              Path("artifacts/multi_horizon_stage2/dataset_report.json").read_text()
+          )
+          assert payload["performance_metrics_computed"] is False
+          assert payload["guardrails"]["edge_status"] == "NOT_PROVEN"
+          assert payload["guardrails"]["live_model_mutated"] is False
+          assert payload["guardrails"]["frozen_52_feature_graph_mutated"] is False
+          assert payload["guardrails"]["future_holdout_read"] is False
+          assert payload["guardrails"]["shadow62_mutated"] is False
+          assert payload["horizons"]["1d"]["state"] == "DATA_PENDING"
+          for key in ("4h", "12h", "2d", "30d"):
+              assert payload["walk_forward_plans"][key]["historical_test"]["metrics_read"] is False
+          PY
+      - name: Upload Stage 2 audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bullionvault-multi-horizon-stage2-report
+          path: artifacts/multi_horizon_stage2/dataset_report.json
+          if-no-files-found: error
