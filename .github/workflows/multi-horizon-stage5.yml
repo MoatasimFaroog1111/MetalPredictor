@@ -6,7 +6,7 @@ on:
       - "src/metal_predictor/forward_bars/**"
       - "src/metal_predictor/live/forward_bar_runtime.py"
       - "live_web/forecast.*"
-      - "tests/test_forward_bar_stage5.py"
+      - "tests/test_forward_bar_stage5*.py"
       - ".github/workflows/multi-horizon-stage5.yml"
   push:
     branches: ["research/multi-horizon-stage5-forecast-pages"]
@@ -14,7 +14,7 @@ on:
       - "src/metal_predictor/forward_bars/**"
       - "src/metal_predictor/live/forward_bar_runtime.py"
       - "live_web/forecast.*"
-      - "tests/test_forward_bar_stage5.py"
+      - "tests/test_forward_bar_stage5*.py"
       - ".github/workflows/multi-horizon-stage5.yml"
 
 permissions:
@@ -39,4 +39,4 @@ jobs:
       - name: Compile
         run: python -m compileall -q src/metal_predictor/forward_bars src/metal_predictor/live/forward_bar_runtime.py
       - name: Verify Stage 4 and Stage 5 isolation
-        run: python -m pytest tests/test_forward_bar_factory.py tests/test_forward_bar_daily.py tests/test_forward_bar_stage5.py
+        run: python -m pytest tests/test_forward_bar_factory.py tests/test_forward_bar_daily.py tests/test_forward_bar_stage5.py tests/test_forward_bar_stage5_gap.py
