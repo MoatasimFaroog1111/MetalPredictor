@@ -8,7 +8,7 @@
   "training_last_target_timestamp_utc": "2026-08-07T21:00:00+00:00",
   "feature_count": 62,
   "candidate_feature_count": 10,
-  "candidate_payload_sha256": "093f6f205c4eb1e878d8111cd9d2b6f52c61d6987dd7348fcb4419e010e942b9",
+  "candidate_payload_sha256": "7f0875e77bc0e08ef4a2f7c8cd22134f823d4ee616a61dfe19546dd4b3d3200d",
   "max_prediction_equivalence_error": 0.0,
   "historical_test_rescored": false,
   "future_holdout_read": false,

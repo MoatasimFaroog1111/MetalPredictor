@@ -3,7 +3,7 @@
   "freeze_id": "xpt-xpd-shadow-62-v1-20260814",
   "protocol_version": "xpt-xpd-shadow-holdout-v1",
   "protocol_predeclared_utc": "2026-08-13T06:34:00Z",
-  "research_code_cutoff_commit": "ac8e85dbd763e3e5112c0812fe949a71f434e02f",
+  "research_code_cutoff_commit": "5fe83cdf0e19765c16a2250c67c902d65ab6f5eb",
   "candidate_id": "xpt-xpd-candle-shape-own-returns-v1",
   "candidate_families": [
     "candle_shape",
@@ -35,9 +35,9 @@
   "historical_source_dataset_path": "XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet",
   "historical_source_dataset_git_blob_sha": "9b95fcc5aa2679208c6b5c44c830ce6b1eaa5829",
   "enhanced_training_parquet_sha256": {
-    "train": "d36ef9566bd661fbbb3036b6b7a257dbc061643c1197e136bf27ea7b447b03e7",
-    "validation": "1d792ae3bb0ec0d40cb4bb3e5a19577123c6a1381d4cb5811c6c28db530ef9fa",
-    "test": "05db6ecb89a14a1e4dbdcdc86a26b08f2c65105ab069b5665c6ab2071c1f744b"
+    "train": "c62a6284c7486f6d6f31ff34af4c9742889ef25db2ac8f6d5851812109570ef8",
+    "validation": "26f0fca6266d96c62275ee6a46df96f50e032716470c0b41d0b8e9ddc9c9d651",
+    "test": "b158d0bb6bc7d9d903ca10813acfab8c077af574931dfeb20c2121d91aa7a69b"
   },
   "training_scope": "all labeled historical Train+Validation+confirmed historical Test rows available before shadow protocol; no future-holdout rows",
   "holdout_first_feature_bar_start_utc": "2026-08-14T00:00:00Z",
@@ -71,7 +71,7 @@
       "name": "ridge_alpha_100",
       "candidate_id": "xpt-xpd-candle-shape-own-returns-v1",
       "path": "shadow_holdout/models/xpt_xpd_62_ridge_alpha_100.json",
-      "payload_sha256": "093f6f205c4eb1e878d8111cd9d2b6f52c61d6987dd7348fcb4419e010e942b9",
+      "payload_sha256": "7f0875e77bc0e08ef4a2f7c8cd22134f823d4ee616a61dfe19546dd4b3d3200d",
       "feature_count": 62,
       "role": "research-only shadow candidate"
     }
