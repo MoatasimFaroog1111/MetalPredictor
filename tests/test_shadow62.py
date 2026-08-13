@@ -216,7 +216,7 @@ def test_shadow_runtime_is_disabled_by_default_and_prediction_values_are_sealed(
     app.state.repository = object()
 
     installed = install_shadow62_runtime(app)
-    paths = {route.path for route in installed.routes if hasattr(route, "path")}
+    paths = set(installed.openapi()["paths"])
 
     assert installed is app
     assert installed.state.shadow62_engine is None
