@@ -3,6 +3,10 @@ name: XPT XPD Shadow62 Freeze
 on:
   push:
     branches: ["research/xpt-xpd-shadow-62-v1"]
+    paths-ignore:
+      - "shadow_holdout/freeze_manifest.json"
+      - "shadow_holdout/model_freeze_report.json"
+      - "shadow_holdout/models/xpt_xpd_62_ridge_alpha_100.json"
 
 permissions:
   contents: write
@@ -117,6 +121,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Shadow62 freeze artifacts already match the locked protocol."
           else
-            git commit -m "Freeze XPT/XPD shadow62 candidate artifact [skip ci]"
+            git commit -m "Freeze XPT/XPD shadow62 candidate artifact"
             git push origin HEAD:research/xpt-xpd-shadow-62-v1
           fi
