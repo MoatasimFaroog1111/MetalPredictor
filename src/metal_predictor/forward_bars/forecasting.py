@@ -17,12 +17,7 @@ _STAGE3_SELECTED_BASELINE: Final = frozenset({"4h", "12h", "2d", "30d"})
 
 
 class MultiHorizonBaselineForecastService:
-    """Publish only the scientifically retained random-walk research baseline.
-
-    The latest completed forward bar must pass the Stage-5 admission policy. A rejected
-    latest bar cannot be replaced by an older admitted bar. The service computes no
-    performance metric and never promotes a model or creates a trading signal.
-    """
+    """Publish the retained research baseline only from the newest valid evidence."""
 
     def __init__(
         self,
@@ -61,9 +56,13 @@ class MultiHorizonBaselineForecastService:
 
         bars = self._repository.history(key, limit=500)
         admitted_count = sum(self._admission.evaluate(bar).admitted for bar in bars)
+        latest_assessed_end = self._repository.latest_assessed_end(key)
         evidence = {
-            "completed_forward_bar_count": len(bars),
+            "materialized_forward_bar_count": len(bars),
             "admitted_forward_bar_count": int(admitted_count),
+            "latest_assessed_end_utc": (
+                latest_assessed_end.isoformat() if latest_assessed_end is not None else None
+            ),
             "admission_policy": self._admission.specification,
         }
         if not bars:
@@ -84,6 +83,21 @@ class MultiHorizonBaselineForecastService:
         decision = self._admission.evaluate(latest)
         evidence["latest_bar_admission"] = decision.as_dict()
         evidence["latest_bar_quality"] = self._bar_quality(latest)
+
+        if latest_assessed_end is not None and latest_assessed_end > latest.bucket_end_utc:
+            return {
+                "horizon_key": key,
+                "interval_seconds": latest.interval_seconds,
+                "state": "COLLECTING_EVIDENCE",
+                "forecast_available": False,
+                "reason": "LATEST_ASSESSED_BUCKET_IS_EXPLICIT_GAP",
+                "forecast_method": BASELINE_ID,
+                "model_selection_evidence": self._selection_evidence(key),
+                "evidence": evidence,
+                "latest_bar": self._bar_reference(latest),
+                "safety": self._safety(),
+            }
+
         if not decision.admitted:
             return {
                 "horizon_key": key,
