@@ -30,7 +30,7 @@ function formatSaudi(iso) {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ar-SA", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     timeZone: "Asia/Riyadh",
     year: "numeric",
     month: "short",
@@ -71,12 +71,12 @@ function renderEvidence(payload) {
     : `${quality.snapshot_count} / ${quality.expected_snapshot_count}`;
   $("access-mode").textContent = firstKey(quality.access_mode_counts);
   $("freshness").textContent = firstKey(quality.freshness_status_counts);
-  $("completed-bars").textContent = evidence.completed_forward_bar_count ?? "0";
+  $("completed-bars").textContent = evidence.materialized_forward_bar_count ?? "0";
   $("admitted-bars").textContent = evidence.admitted_forward_bar_count ?? "0";
   $("admission-reason").textContent = admission.reason || "WAITING_FOR_COMPLETED_BAR";
 
   const badge = $("admission-badge");
-  const admitted = admission.admitted === true;
+  const admitted = admission.admitted === true && payload.reason !== "LATEST_ASSESSED_BUCKET_IS_EXPLICIT_GAP";
   badge.textContent = admitted ? "ADMITTED" : "COLLECTING";
   badge.classList.toggle("pass", admitted);
   badge.classList.toggle("wait", !admitted);
@@ -117,7 +117,7 @@ function renderAvailable(payload) {
   banner.classList.add("available");
   banner.classList.remove("collecting");
   $("state-title").textContent = "Baseline متاح من Bar اجتازت بوابة الجودة";
-  $("state-message").textContent = "التوقع المرجعي للفترة التالية يساوي آخر Close Mid المقبول وفق random_walk_zero_return؛ هذا ليس إثباتًا لميزة تنبؤية.";
+  $("state-message").textContent = "القيمة المرجعية للفترة التالية تساوي آخر Close Mid المقبول وفق random_walk_zero_return؛ هذا ليس إثباتًا لميزة تنبؤية.";
 
   $("reference-price").textContent = formatPrice(reference.close_mid_usd_per_kg);
   $("reference-time").textContent = `آخر Snapshot مرصود: ${formatSaudi(reference.last_observed_snapshot_utc)} بتوقيت السعودية`;
@@ -142,8 +142,10 @@ function renderCollecting(payload) {
   $("state-title").textContent = "COLLECTING_EVIDENCE";
   if (payload.reason === "NO_COMPLETED_FORWARD_BAR") {
     $("state-message").textContent = "لم تكتمل بعد Bar أمامية لهذه الفترة. لن يتم تصنيع أو استكمال بيانات مفقودة.";
+  } else if (payload.reason === "LATEST_ASSESSED_BUCKET_IS_EXPLICIT_GAP") {
+    $("state-message").textContent = "أحدث Bucket سُجلت كفجوة صريحة، لذلك تم منع الرجوع إلى Bar أقدم.";
   } else {
-    $("state-message").textContent = "آخر Bar مكتملة لم تجتز بوابة الجودة الصارمة، لذلك لا تنشر الصفحة رقمًا تنبؤيًا من هذه Bar.";
+    $("state-message").textContent = "آخر Bar مكتملة لم تجتز بوابة الجودة الصارمة، لذلك لا تنشر الصفحة قيمة رقمية من هذه Bar.";
   }
 }
 
