@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/forecast-hub.css" />
+  <script src="/static/forecast-hub.js" defer></script>
+  <title>Multi-Horizon Forecast</title>
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <main class="shell forecast-hub-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">Ag</div>
+        <div>
+          <h1>Multi-Horizon Forecast</h1>
+          <p id="page-subtitle">جميع الفترات في شاشة واحدة</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="tool-button link-button" href="/">الرئيسية</a>
+        <div class="status-pill" id="page-status"><span></span><b>جاري التحميل</b></div>
+      </div>
+    </header>
+
+    <nav class="forecast-hub-nav" aria-label="اختيار فترة التوقع">
+      <button type="button" data-horizon="4h" class="active" aria-pressed="true">4 ساعات</button>
+      <button type="button" data-horizon="12h" aria-pressed="false">12 ساعة</button>
+      <button type="button" data-horizon="1d" aria-pressed="false">يوم</button>
+      <button type="button" data-horizon="2d" aria-pressed="false">يومان</button>
+      <button type="button" data-horizon="30d" aria-pressed="false">30 يومًا</button>
+    </nav>
+
+    <section class="warning" role="note">
+      <strong>Research only • NOT_PROVEN</strong>
+      <span>التنقل بين الفترات يتم داخل نفس الشاشة دون فتح صفحات منفصلة.</span>
+    </section>
+
+    <section class="forecast-hub-state" id="state-banner">
+      <div><span class="eyebrow">State</span><strong id="state-title">جاري قراءة الأدلة</strong></div>
+      <p id="state-message">—</p>
+    </section>
+
+    <section class="forecast-hub-summary">
+      <article class="card price-card compact-price-card">
+        <div class="eyebrow">آخر قيمة مرجعية مقبولة</div>
+        <div class="price" id="reference-price">—</div>
+        <div class="unit">USD / kg</div>
+        <div class="meta" id="reference-time">—</div>
+      </article>
+
+      <article class="card primary-forecast-card">
+        <div class="card-head">
+          <div><div class="eyebrow">Random Walk Baseline</div><h2 id="forecast-horizon-label">—</h2></div>
+          <div class="direction neutral">BASELINE</div>
+        </div>
+        <div class="forecast-price" id="forecast-price">—</div>
+        <div class="metric-row"><span>وقت الهدف</span><b id="forecast-target-time">—</b></div>
+        <div class="metric-row"><span>العائد المرجعي</span><b id="forecast-return">—</b></div>
+        <div class="metric-row"><span>Prediction Interval</span><b id="prediction-interval">غير متاح</b></div>
+      </article>
+    </section>
+
+    <section class="forecast-hub-details">
+      <article class="card evidence-card">
+        <div class="section-head">
+          <div><div class="eyebrow">Data Quality Admission</div><h2>جودة الدليل الحالي</h2></div>
+          <span class="hub-badge" id="admission-badge">—</span>
+        </div>
+        <dl class="forecast-hub-dl">
+          <div><dt>Coverage</dt><dd id="coverage">—</dd></div>
+          <div><dt>Snapshots</dt><dd id="snapshots">—</dd></div>
+          <div><dt>Access</dt><dd id="access-mode">—</dd></div>
+          <div><dt>Freshness</dt><dd id="freshness">—</dd></div>
+          <div><dt>Completed Bars</dt><dd id="completed-bars">—</dd></div>
+          <div><dt>Admitted Bars</dt><dd id="admitted-bars">—</dd></div>
+          <div><dt>Admission Gate</dt><dd id="admission-reason">—</dd></div>
+        </dl>
+      </article>
+
+      <article class="card evidence-card">
+        <div class="eyebrow">Model Evidence</div>
+        <h2>حالة النموذج</h2>
+        <dl class="forecast-hub-dl">
+          <div><dt>Method</dt><dd id="forecast-method">random_walk_zero_return</dd></div>
+          <div><dt>Selection Scope</dt><dd id="selection-scope">—</dd></div>
+          <div><dt>Candidate Pass Count</dt><dd id="candidate-pass-count">—</dd></div>
+          <div><dt>Historical Confirmation</dt><dd id="historical-confirmation">—</dd></div>
+          <div><dt>Edge Status</dt><dd>NOT_PROVEN</dd></div>
+          <div><dt>Execution</dt><dd>DISABLED</dd></div>
+        </dl>
+        <p class="hub-note" id="selection-note">—</p>
+      </article>
+    </section>
+
+    <section class="card forecast-hub-audit">
+      <div class="section-head">
+        <div><div class="eyebrow">Timing & Provenance</div><h2>مرجع البيانات</h2></div>
+        <button class="hub-refresh" id="refresh-page" type="button">تحديث</button>
+      </div>
+      <dl class="forecast-hub-dl">
+        <div><dt>Source Bar Start</dt><dd id="bar-start">—</dd></div>
+        <div><dt>Source Bar End</dt><dd id="bar-end">—</dd></div>
+        <div><dt>Last Observed Snapshot</dt><dd id="last-snapshot">—</dd></div>
+        <div><dt>Target Bar Start</dt><dd id="target-start">—</dd></div>
+        <div><dt>Target Bar End</dt><dd id="target-end">—</dd></div>
+        <div><dt>Source</dt><dd id="source-provider">BullionVault</dd></div>
+      </dl>
+    </section>
+
+    <footer><span>MetalPredictor • Multi-Horizon Research</span><span id="last-refresh">—</span></footer>
+  </main>
+</body>
+</html>
