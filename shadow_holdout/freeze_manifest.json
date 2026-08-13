@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "freeze_id": "xpt-xpd-shadow-62-v1-20260814",
+  "protocol_version": "xpt-xpd-shadow-holdout-v1",
+  "protocol_predeclared_utc": "2026-08-13T06:34:00Z",
+  "research_code_cutoff_commit": "d500d24e7f7c7d02b0e3d9ef7025250772bb8851",
+  "candidate_id": "xpt-xpd-candle-shape-own-returns-v1",
+  "candidate_families": [
+    "candle_shape",
+    "own_returns"
+  ],
+  "candidate_features": [
+    "xpt_candle_range_pct",
+    "xpt_candle_body_pct",
+    "xpd_candle_range_pct",
+    "xpd_candle_body_pct",
+    "xpt_log_return_1h",
+    "xpt_log_return_6h",
+    "xpt_log_return_24h",
+    "xpd_log_return_1h",
+    "xpd_log_return_6h",
+    "xpd_log_return_24h"
+  ],
+  "candidate_feature_fingerprint_sha256": "41b8089018654b8f722bd01b129031a49960c2054c6c6e64f442cef0c65be329",
+  "candidate_feature_count": 10,
+  "total_model_feature_count": 62,
+  "historical_confirmation": {
+    "status": "CONFIRMED",
+    "run_id": 31603954945,
+    "candidate_locked_before_old_test_read": true,
+    "no_post_test_feature_tuning_allowed": true,
+    "historical_test_reused_for_shadow_fit_only_after_confirmation": true,
+    "historical_test_rescored_during_shadow_freeze": false
+  },
+  "historical_source_dataset_path": "XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet",
+  "historical_source_dataset_git_blob_sha": "9b95fcc5aa2679208c6b5c44c830ce6b1eaa5829",
+  "enhanced_training_parquet_sha256": {
+    "train": "c62a6284c7486f6d6f31ff34af4c9742889ef25db2ac8f6d5851812109570ef8",
+    "validation": "26f0fca6266d96c62275ee6a46df96f50e032716470c0b41d0b8e9ddc9c9d651",
+    "test": "b158d0bb6bc7d9d903ca10813acfab8c077af574931dfeb20c2121d91aa7a69b"
+  },
+  "training_scope": "all labeled historical Train+Validation+confirmed historical Test rows available before shadow protocol; no future-holdout rows",
+  "holdout_first_feature_bar_start_utc": "2026-08-14T00:00:00Z",
+  "holdout_last_feature_bar_start_exclusive_utc": "2027-02-10T00:00:00Z",
+  "earliest_final_score_utc": "2027-02-10T02:00:00Z",
+  "minimum_exact_hour_outcomes": 2500,
+  "fixed_window_days": 180,
+  "auxiliary_live_source": {
+    "provider": "Dukascopy Public Historical Feed",
+    "symbols": [
+      "XPT.CMD/USD",
+      "XPD.CMD/USD"
+    ],
+    "offer_side": "BID",
+    "timeframe": "1h",
+    "timestamp_semantics": "BAR_START_UTC",
+    "bar_value_availability": "KNOWN_AFTER_BAR_CLOSE",
+    "exact_timestamp_alignment": true,
+    "forward_fill": false,
+    "interpolation": false
+  },
+  "models": {
+    "baseline": {
+      "name": "ridge_alpha_100",
+      "path": "forward_holdout/models/ridge_alpha_100.json",
+      "payload_sha256": "91446fd0868b3ac9ad1d75e318666d6bbc7a7ab4ea14b65849684d66a22c6585",
+      "feature_count": 52,
+      "role": "unchanged frozen 52-feature live benchmark"
+    },
+    "candidate": {
+      "name": "ridge_alpha_100",
+      "candidate_id": "xpt-xpd-candle-shape-own-returns-v1",
+      "path": "shadow_holdout/models/xpt_xpd_62_ridge_alpha_100.json",
+      "payload_sha256": "cc46a32796641b120610a18d8f0742f03b105dfce14b361705ba958f4ab6e1c2",
+      "feature_count": 62,
+      "role": "research-only shadow candidate"
+    }
+  },
+  "final_score_rules": {
+    "one_shot_fixed_window": true,
+    "no_interim_performance_metrics": true,
+    "minimum_exact_hour_outcomes": 2500,
+    "final_scorer_not_implemented_before_holdout_end": true
+  },
+  "guardrails": {
+    "research_only": true,
+    "edge_status": "NOT_PROVEN",
+    "live_model_mutated": false,
+    "frozen_52_feature_graph_mutated": false,
+    "automatic_live_promotion": false,
+    "future_holdout_read": false,
+    "interim_scoring_enabled": false
+  }
+}

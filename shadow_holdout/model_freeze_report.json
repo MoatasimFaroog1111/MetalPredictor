@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "freeze_id": "xpt-xpd-shadow-62-v1-20260814",
+  "candidate_id": "xpt-xpd-candle-shape-own-returns-v1",
+  "training_rows": 26836,
+  "training_first_timestamp_utc": "2021-08-09T00:00:00+00:00",
+  "training_last_timestamp_utc": "2026-08-07T20:00:00+00:00",
+  "training_last_target_timestamp_utc": "2026-08-07T21:00:00+00:00",
+  "feature_count": 62,
+  "candidate_feature_count": 10,
+  "candidate_payload_sha256": "cc46a32796641b120610a18d8f0742f03b105dfce14b361705ba958f4ab6e1c2",
+  "max_prediction_equivalence_error": 0.0,
+  "historical_test_rescored": false,
+  "future_holdout_read": false,
+  "performance_metrics_computed": false,
+  "live_model_mutated": false
+}
