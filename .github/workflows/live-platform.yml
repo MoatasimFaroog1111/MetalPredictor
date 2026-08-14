@@ -15,6 +15,7 @@ on:
       - "tests/test_live_time_audit.py"
       - "tests/test_spread_profit.py"
       - "tests/test_bullionvault_quotes.py"
+      - "tests/test_bullionvault_api_hardening.py"
       - "tests/test_microstructure_research.py"
       - "tests/test_forward_bar_*.py"
       - "tests/test_shadow62.py"
@@ -45,6 +46,7 @@ on:
       - "tests/test_live_time_audit.py"
       - "tests/test_spread_profit.py"
       - "tests/test_bullionvault_quotes.py"
+      - "tests/test_bullionvault_api_hardening.py"
       - "tests/test_microstructure_research.py"
       - "tests/test_forward_bar_*.py"
       - "tests/test_shadow62.py"
@@ -87,7 +89,7 @@ jobs:
       - name: Compile live package
         run: python -m compileall -q src/metal_predictor/live src/metal_predictor/microstructure src/metal_predictor/forward_bars src/metal_predictor/shadow62 run_live.py docker_entrypoint_live.py
       - name: Run live platform tests
-        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py tests/test_microstructure_research.py tests/test_forward_bar_factory.py tests/test_forward_bar_daily.py tests/test_shadow62.py
+        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py tests/test_bullionvault_api_hardening.py tests/test_microstructure_research.py tests/test_forward_bar_factory.py tests/test_forward_bar_daily.py tests/test_forward_bar_stage5.py tests/test_forward_bar_stage5_gap.py tests/test_shadow62.py
 
   docker:
     runs-on: ubuntu-24.04
@@ -100,6 +102,11 @@ jobs:
         run: |
           set -euo pipefail
           docker volume create metalpredictor-ci-data >/dev/null
+          docker run --rm \
+            --entrypoint sh \
+            -v metalpredictor-ci-data:/data \
+            metalpredictor-live:ci \
+            -c "touch /data/bullionvault_forward_bars.sqlite3 && chown 0:0 /data/bullionvault_forward_bars.sqlite3 && chmod 600 /data/bullionvault_forward_bars.sqlite3"
           docker run -d \
             --name metalpredictor-live-ci \
             -e LIVE_ADMIN_TOKEN=ci-admin-token \
@@ -158,4 +165,5 @@ jobs:
           PY
 
           test "$(docker exec metalpredictor-live-ci sh -c "awk '/^Uid:/{print \$2}' /proc/1/status")" = "10001"
+          test "$(docker exec metalpredictor-live-ci stat -c '%u' /data/bullionvault_forward_bars.sqlite3)" = "10001"
           docker exec --user 10001 metalpredictor-live-ci python -c "from pathlib import Path; p=Path('/data/ci-write-probe'); p.write_text('ok'); assert p.read_text() == 'ok'; p.unlink()"
