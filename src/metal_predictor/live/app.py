@@ -19,12 +19,14 @@ from metal_predictor.live.contracts import HourlySilverBar
 from metal_predictor.live.inference import LiveForecastOrchestrator, LivePredictionEngine
 from metal_predictor.live.market_source_factory import build_live_market_source
 from metal_predictor.live.notifications import TelegramForecastPublisher
+from metal_predictor.live.quote_contracts import MarketQuoteProvider
 from metal_predictor.live.repository import SQLiteForecastRepository
 from metal_predictor.live.scheduler import HourlyCollectionScheduler
 from metal_predictor.live.settings import LiveSettings
 from metal_predictor.live.spread_api import create_spread_research_router
 from metal_predictor.microstructure.api import create_microstructure_research_router
 from metal_predictor.microstructure.collector import MicrostructureResearchCollector
+from metal_predictor.microstructure.persisted_quote import PersistedMicrostructureQuoteProvider
 from metal_predictor.microstructure.repository import SQLiteMicrostructureRepository
 from metal_predictor.microstructure.scheduler import MicrostructureResearchScheduler
 
@@ -60,7 +62,11 @@ class HourlyBarRequest(BaseModel):
         )
 
 
-def create_app(settings: LiveSettings | None = None) -> FastAPI:
+def create_app(
+    settings: LiveSettings | None = None,
+    *,
+    bullionvault_network_quote_provider: MarketQuoteProvider | None = None,
+) -> FastAPI:
     config = settings or LiveSettings.from_environment()
     root = config.repository_root.resolve()
     db_path = config.database_path
@@ -79,10 +85,19 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     )
     orchestrator = LiveForecastOrchestrator(repository, engine, notifier)
     source = build_live_market_source(config)
-    bullionvault_quote_provider = build_bullionvault_quote_provider(config)
+    network_quote_provider = (
+        bullionvault_network_quote_provider or build_bullionvault_quote_provider(config)
+    )
     microstructure_repository = SQLiteMicrostructureRepository(microstructure_db_path)
+    persisted_quote_provider = PersistedMicrostructureQuoteProvider(
+        microstructure_repository,
+        max_age_seconds=max(
+            180,
+            int(config.bullionvault_microstructure_interval_seconds) * 3,
+        ),
+    )
     microstructure_collector = MicrostructureResearchCollector(
-        bullionvault_quote_provider,
+        network_quote_provider,
         microstructure_repository,
     )
     catchup = (
@@ -147,7 +162,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.orchestrator = orchestrator
     app.state.market_source = source
-    app.state.bullionvault_quote_provider = bullionvault_quote_provider
+    app.state.bullionvault_quote_provider = persisted_quote_provider
     app.state.microstructure_repository = microstructure_repository
     app.state.microstructure_collector = microstructure_collector
     app.state.microstructure_scheduler = microstructure_scheduler
@@ -159,7 +174,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
     app.include_router(
         create_bullionvault_research_router(
             orchestrator.latest,
-            bullionvault_quote_provider,
+            persisted_quote_provider,
         )
     )
     app.include_router(
@@ -231,6 +246,7 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
         latest = orchestrator.latest()
         recent_bars = repository.recent_bars(limit=1)
         latest_microstructure = microstructure_repository.latest_record()
+        persisted_quote_status = persisted_quote_provider.status()
         return {
             "service": "silver-ai-live",
             "model": engine.model_status(),
@@ -249,6 +265,9 @@ def create_app(settings: LiveSettings | None = None) -> FastAPI:
                 "public_fallback": config.bullionvault_public_fallback,
                 "read_only": True,
                 "execution_enabled": False,
+                "network_access_owner": "MICROSTRUCTURE_COLLECTOR_ONLY",
+                "public_api_direct_network_requests": False,
+                "persisted_snapshot": persisted_quote_status,
             },
             "bullionvault_microstructure": {
                 "enabled": config.bullionvault_microstructure_enabled,
