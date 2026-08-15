@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
@@ -8,6 +9,7 @@ import pandas as pd
 
 from metal_predictor.core import ColumnConfig, FeatureConfig
 from metal_predictor.data import ParquetDataLoader, SilverDatasetValidator
+from metal_predictor.direct_horizon.integrity import VerifiedSourceSnapshot
 from metal_predictor.features import (
     MomentumFeatures,
     PriceActionFeatures,
@@ -96,6 +98,7 @@ class Stage7DatasetBuilder:
         validator: SilverDatasetValidator | None = None,
         features: Stage7CausalFeatureBuilder | None = None,
         targets: Stage7ExactClockTargetBuilder | None = None,
+        source_snapshot: VerifiedSourceSnapshot | None = None,
     ) -> None:
         self._root = Path(repo_root)
         self._columns = ColumnConfig()
@@ -103,9 +106,10 @@ class Stage7DatasetBuilder:
         self._validator = validator or SilverDatasetValidator(self._columns)
         self._features = features or Stage7CausalFeatureBuilder(self._columns, FeatureConfig())
         self._targets = targets or Stage7ExactClockTargetBuilder()
+        self._source_snapshot = source_snapshot
 
     def build(self, horizon: Stage7HorizonSpec) -> Stage7HorizonDataset:
-        raw = self._loader.load(self._root / STAGE7_SOURCE_PATH)
+        raw = self._load_source()
         raw = self._normalize(raw)
         self._validator.validate(raw)
         featured, feature_names = self._features.transform(raw)
@@ -129,6 +133,13 @@ class Stage7DatasetBuilder:
             target_name=target_name,
             target_close_name=target_close_name,
         )
+
+    def _load_source(self) -> pd.DataFrame:
+        if self._source_snapshot is not None:
+            # Reparse the same immutable verified bytes for every horizon. The
+            # repository path is never reopened during this runner execution.
+            return pd.read_parquet(BytesIO(self._source_snapshot.data))
+        return self._loader.load(self._root / STAGE7_SOURCE_PATH)
 
     def _normalize(self, frame: pd.DataFrame) -> pd.DataFrame:
         c = self._columns
