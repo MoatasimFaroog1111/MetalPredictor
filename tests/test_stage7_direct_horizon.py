@@ -5,13 +5,21 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from metal_predictor.direct_horizon.dataset import (
     Stage7DatasetBuilder,
     Stage7ExactClockTargetBuilder,
 )
+from metal_predictor.direct_horizon.integrity import (
+    GitBlobIntegrityVerifier,
+    SourceIntegrityError,
+    git_blob_sha1,
+)
 from metal_predictor.direct_horizon.models import Stage7ModelFactory
 from metal_predictor.direct_horizon.preregistration import (
+    STAGE7_SOURCE_GIT_BLOB_SHA1,
+    STAGE7_SOURCE_PATH,
     Stage7HorizonSpec,
     stage7_candidates,
     stage7_horizons,
@@ -32,6 +40,27 @@ def test_stage7_preregistration_lock_matches_code_payload() -> None:
     fingerprint = stage7_preregistration_fingerprint_sha256()
     assert len(fingerprint) == 64
     assert fingerprint == stage7_preregistration_fingerprint_sha256()
+
+
+def test_stage7_canonical_source_matches_preregistered_git_blob() -> None:
+    source = Path(STAGE7_SOURCE_PATH)
+    assert git_blob_sha1(source) == STAGE7_SOURCE_GIT_BLOB_SHA1
+    assert (
+        GitBlobIntegrityVerifier(STAGE7_SOURCE_GIT_BLOB_SHA1).verify(source)
+        == STAGE7_SOURCE_GIT_BLOB_SHA1
+    )
+
+
+def test_stage7_source_verifier_fails_closed_after_byte_change(tmp_path: Path) -> None:
+    source = tmp_path / "immutable-research-source.bin"
+    source.write_bytes(b"stage7-canonical-bytes")
+    expected = git_blob_sha1(source)
+    verifier = GitBlobIntegrityVerifier(expected)
+    assert verifier.verify(source) == expected
+
+    source.write_bytes(b"stage7-canonical-bytes-modified")
+    with pytest.raises(SourceIntegrityError, match="source integrity failure"):
+        verifier.verify(source)
 
 
 def test_stage7_target_requires_exact_future_clock() -> None:
