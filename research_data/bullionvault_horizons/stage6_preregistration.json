@@ -147,7 +147,7 @@
     "source_domain_merging": false
   },
   "target": {
-    "target_version": "bullionvault-next-source-bar-log-return-v1",
+    "target_version": "next-source-bar-log-return-v1",
     "semantics": "log(next_source_bar_close / current_source_bar_close)",
     "changed_from_stage3": false
   },
