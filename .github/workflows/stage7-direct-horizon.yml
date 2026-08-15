@@ -4,9 +4,17 @@ on:
   pull_request:
     paths:
       - "src/metal_predictor/direct_horizon/**"
+      - "src/metal_predictor/features.py"
+      - "src/metal_predictor/core.py"
+      - "src/metal_predictor/data.py"
+      - "src/metal_predictor/multi_horizon/statistics.py"
+      - "XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet"
       - "research_data/direct_horizon_stage7/preregistration.json"
       - "tests/test_stage7_direct_horizon.py"
       - "run_stage7_direct_horizon.py"
+      - "requirements.txt"
+      - "requirements-modeling.txt"
+      - "pyproject.toml"
       - "STAGE7_DIRECT_MULTI_HORIZON.md"
       - ".github/workflows/stage7-direct-horizon.yml"
   workflow_dispatch:
@@ -59,6 +67,7 @@ jobs:
           assert report['microstructure_used_for_fit'] is False
           assert report['candidate_artifacts_written'] is False
           assert report['production_forecast_routes_mutated'] is False
+          assert report['source']['verified_git_blob_sha1'] == '9b95fcc5aa2679208c6b5c44c830ce6b1eaa5829'
           assert report['guardrails']['edge_status'] == 'NOT_PROVEN'
           assert report['guardrails']['research_only'] is True
           assert report['guardrails']['buy_sell_enabled'] is False
