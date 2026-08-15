@@ -11,6 +11,8 @@ The study uses the repository's canonical five-year H1 silver dataset:
 - unit: USD/kg
 - preregistered Git blob: `9b95fcc5aa2679208c6b5c44c830ce6b1eaa5829`
 
+The executable Stage-7 runner verifies the actual parquet bytes against that preregistered Git-blob SHA-1 before any dataset build or model evaluation. A modified source fails closed even in a local/manual run. CI performs the same source check independently and also reruns whenever the canonical source or any direct Stage-7 feature/statistics dependency changes.
+
 BullionVault forward bars and microstructure snapshots are a different provenance domain and are not merged into Stage-7 training data.
 
 ## Direct targets
