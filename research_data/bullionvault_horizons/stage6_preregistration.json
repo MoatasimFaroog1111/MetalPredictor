@@ -1,0 +1,165 @@
+{
+  "baseline": {
+    "baseline_id": "random_walk_zero_return",
+    "predicted_log_return": 0.0
+  },
+  "candidates": [
+    {
+      "candidate_id": "train_median_return_v2",
+      "estimator": "metal_predictor.multi_horizon.stage6_models.TrainMedianReturnRegressor",
+      "parameters": {},
+      "preprocessing": [],
+      "rationale": "Absolute-error-optimal constant estimated from train rows only; tests whether a stable non-zero conditional drift beats the zero-return random-walk baseline."
+    },
+    {
+      "candidate_id": "ridge_alpha_1000_v2",
+      "estimator": "sklearn.linear_model.Ridge",
+      "parameters": {
+        "alpha": 1000.0
+      },
+      "preprocessing": [
+        "StandardScaler(train_only)"
+      ],
+      "rationale": "Very strong linear shrinkage toward the zero-return baseline to reduce the variance that hurt the Stage-3 linear candidates."
+    },
+    {
+      "candidate_id": "random_forest_shallow_v2",
+      "estimator": "sklearn.ensemble.RandomForestRegressor",
+      "parameters": {
+        "n_estimators": 500,
+        "max_depth": 2,
+        "min_samples_leaf": 8,
+        "max_features": 0.7,
+        "bootstrap": true,
+        "random_state": 20260815,
+        "n_jobs": 1
+      },
+      "preprocessing": [],
+      "rationale": "Low-depth bagged nonlinear model with deliberately large leaves for the small historical samples; no hyperparameter search is permitted."
+    },
+    {
+      "candidate_id": "hist_gradient_boosting_shallow_v2",
+      "estimator": "sklearn.ensemble.HistGradientBoostingRegressor",
+      "parameters": {
+        "loss": "absolute_error",
+        "learning_rate": 0.03,
+        "max_iter": 120,
+        "max_leaf_nodes": 3,
+        "min_samples_leaf": 10,
+        "l2_regularization": 1.0,
+        "early_stopping": false,
+        "random_state": 20260815
+      },
+      "preprocessing": [],
+      "rationale": "Regularized shallow boosting under absolute loss, fixed in advance to test small nonlinear interactions without a tuning search."
+    }
+  ],
+  "created_for": "MULTI_HORIZON_STAGE6_DEVELOPMENT_ONLY",
+  "development_selection_gate": {
+    "primary_metric": "MAE(target_log_return)",
+    "candidate_must_beat_random_walk_mae": true,
+    "minimum_better_folds": 3,
+    "fold_count": 4,
+    "paired_block_bootstrap_iterations": 5000,
+    "paired_block_bootstrap_block_length_rows": 4,
+    "paired_block_bootstrap_seed": 20260815,
+    "mae_improvement_ci": 0.95,
+    "mae_improvement_ci_lower_must_be_positive": true,
+    "probability_candidate_mae_better_minimum": 0.99,
+    "directional_accuracy_delta_minimum": -0.02,
+    "if_no_candidate_passes": "RETAIN_RANDOM_WALK_BASELINE",
+    "winner_rule": "largest development OOF MAE improvement among candidates passing every gate",
+    "tie_break_order": [
+      "train_median_return_v2",
+      "ridge_alpha_1000_v2",
+      "random_forest_shallow_v2",
+      "hist_gradient_boosting_shallow_v2"
+    ],
+    "hyperparameter_search_allowed": false,
+    "post_result_candidate_editing_allowed": false
+  },
+  "features": {
+    "feature_set_version": "bullionvault-hlc-causal-features-v1",
+    "feature_columns": [
+      "log_return_1",
+      "log_return_2",
+      "log_return_3",
+      "log_return_6",
+      "range_pct",
+      "close_location",
+      "rolling_return_mean_3",
+      "rolling_return_std_3",
+      "rolling_return_mean_6",
+      "rolling_return_std_6",
+      "rolling_range_mean_3",
+      "rolling_range_mean_6"
+    ],
+    "feature_count": 12,
+    "feature_fingerprint_sha256": "5ad621a8b432f874566b115887200e0008a8fe5e4bba207a689894b5de242043",
+    "feature_set_changed_from_stage3": false,
+    "causal_only": true,
+    "calendar_features_allowed": false,
+    "forward_fill": false,
+    "backward_fill": false,
+    "interpolation": false,
+    "resampling": false
+  },
+  "guardrails": {
+    "edge_status": "NOT_PROVEN",
+    "research_only": true,
+    "buy_sell_enabled": false,
+    "execution_enabled": false,
+    "future_holdout_read": false,
+    "historical_test_metrics_read": false
+  },
+  "historical_confirmation_policy": {
+    "authorized_during_preregistration": false,
+    "authorization_condition": "Exactly the selected Stage-6 development winner for a horizon may read the still-sealed historical-test block in a separate, subsequent confirmation run.",
+    "test_read_before_development_pass": false,
+    "post_test_tuning_allowed": false,
+    "failure_action": "DO_NOT_DEPLOY_CANDIDATE; keep baseline and require a newly versioned future study"
+  },
+  "predecessor_stage3_report_sha256": "279b824c0775710b9b60a03a39564519e5ed728a54caca4febcefd71a24586f9",
+  "preregistration_version": "bullionvault-multi-horizon-candidate-expansion-v2",
+  "production_policy": {
+    "candidate_model_artifacts_created_now": false,
+    "candidate_forecast_routes_changed_now": false,
+    "automatic_promotion": false,
+    "live_52_feature_model_mutated": false,
+    "shadow62_mutated": false
+  },
+  "scientific_reason_for_new_version": "Stage 3 was a valid negative result. Stage 6 introduces genuinely new, predeclared candidate families while preserving the same immutable source data, causal feature graph, target, split planner, and sealed historical-test boundary.",
+  "scope": {
+    "horizons": [
+      "4h",
+      "12h",
+      "2d",
+      "30d"
+    ],
+    "blocked_horizons": {
+      "1d": "DATA_PENDING: no direct historical 1d BullionVault chart dataset exists; live forward bars are not resampled into training history."
+    },
+    "cross_horizon_pooling": false,
+    "one_independent_selection_per_horizon": true,
+    "historical_source": "BullionVault Chart Export HLC",
+    "forward_bars_used_for_fit": false,
+    "bullionvault_microstructure_used_for_fit": false,
+    "source_domain_merging": false
+  },
+  "target": {
+    "target_version": "next-source-bar-log-return-v1",
+    "semantics": "log(next_source_bar_close / current_source_bar_close)",
+    "changed_from_stage3": false
+  },
+  "walk_forward": {
+    "planner": "ExpandingWalkForwardPlanner",
+    "fold_count": 4,
+    "purge_bars": 1,
+    "minimum_train_rows": 60,
+    "minimum_validation_rows": 15,
+    "final_historical_test_fraction": 0.2,
+    "minimum_final_test_rows": 30,
+    "split_changed_from_stage3": false,
+    "historical_test_used_for_stage6_development": false
+  }
+}
