@@ -1,0 +1,90 @@
+name: XAG H1 Direct Multi-Horizon Stage 7
+
+on:
+  pull_request:
+    paths:
+      - "src/metal_predictor/direct_horizon/**"
+      - "research_data/direct_horizon_stage7/preregistration.json"
+      - "tests/test_stage7_direct_horizon.py"
+      - "run_stage7_direct_horizon.py"
+      - "STAGE7_DIRECT_MULTI_HORIZON.md"
+      - ".github/workflows/stage7-direct-horizon.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  development:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-modeling.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Verify immutable canonical H1 source blob
+        run: |
+          test "$(git hash-object XAGUSD_H1_5Y_USD_PER_KG_CLEAN.parquet)" = "9b95fcc5aa2679208c6b5c44c830ce6b1eaa5829"
+      - name: Compile Stage 7
+        run: |
+          python -m compileall -q src/metal_predictor/direct_horizon run_stage7_direct_horizon.py
+      - name: Test exact targets and split firewalls
+        run: python -m pytest tests/test_stage7_direct_horizon.py
+      - name: Run preregistered development-only comparison
+        run: python run_stage7_direct_horizon.py
+      - name: Verify holdout and production firewalls
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path('artifacts/stage7_direct_horizon/development_report.json').read_text()
+          )
+          assert report['performance_scope'] == 'DEVELOPMENT_ONLY'
+          assert report['historical_test_metrics_read'] is False
+          assert report['historical_test_predictions_computed'] is False
+          assert report['historical_test_target_values_consumed_by_model'] is False
+          assert report['formal_future_holdout_read'] is False
+          assert report['forward_bars_used_for_fit'] is False
+          assert report['microstructure_used_for_fit'] is False
+          assert report['candidate_artifacts_written'] is False
+          assert report['production_forecast_routes_mutated'] is False
+          assert report['guardrails']['edge_status'] == 'NOT_PROVEN'
+          assert report['guardrails']['research_only'] is True
+          assert report['guardrails']['buy_sell_enabled'] is False
+          assert report['guardrails']['execution_enabled'] is False
+          assert report['guardrails']['automatic_live_promotion'] is False
+          assert report['guardrails']['live_model_mutated'] is False
+          assert report['guardrails']['frozen_52_feature_graph_mutated'] is False
+          assert report['guardrails']['shadow62_mutated'] is False
+          assert set(report['horizons']) == {'4h', '12h', '1d', '2d', '30d'}
+          for key, horizon in report['horizons'].items():
+              firewall = horizon['split_firewall']
+              assert horizon['feature_count'] == 52
+              assert firewall['historical_test_rows'] > 0
+              assert firewall['historical_test_metrics_read'] is False
+              assert firewall['historical_test_predictions_computed'] is False
+              assert firewall['historical_test_used_for_fit'] is False
+              assert firewall['historical_test_used_for_selection'] is False
+              assert firewall['historical_test_target_values_consumed_by_model'] is False
+              assert firewall['purge_hours'] == horizon['horizon_hours']
+              assert firewall['embargo_hours'] == horizon['horizon_hours']
+              for fold in firewall['folds']:
+                  assert fold['train_labels_end_before_validation'] is True
+                  assert fold['future_rows_used_for_training'] is False
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage7-direct-multi-horizon-development-report
+          path: artifacts/stage7_direct_horizon/development_report.json
+          if-no-files-found: error
