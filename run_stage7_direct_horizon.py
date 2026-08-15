@@ -4,7 +4,12 @@ import argparse
 import json
 from pathlib import Path
 
-from metal_predictor.direct_horizon.preregistration import stage7_preregistration_payload
+from metal_predictor.direct_horizon.integrity import GitBlobIntegrityVerifier
+from metal_predictor.direct_horizon.preregistration import (
+    STAGE7_SOURCE_GIT_BLOB_SHA1,
+    STAGE7_SOURCE_PATH,
+    stage7_preregistration_payload,
+)
 from metal_predictor.direct_horizon.research import Stage7DevelopmentRunner
 
 
@@ -24,7 +29,18 @@ def main() -> None:
     if locked != expected:
         raise SystemExit("Stage-7 preregistration lock no longer matches the code payload.")
 
+    # This verification lives inside the executable research boundary rather than
+    # relying only on CI. Local/manual runs therefore fail closed on modified data.
+    verified_source_sha1 = GitBlobIntegrityVerifier(
+        expected_sha1=STAGE7_SOURCE_GIT_BLOB_SHA1
+    ).verify(repo_root / STAGE7_SOURCE_PATH)
+
     payload = Stage7DevelopmentRunner(repo_root=repo_root).run_all()
+    source = payload.get("source")
+    if not isinstance(source, dict):
+        raise SystemExit("Stage-7 source audit payload is malformed.")
+    source["verified_git_blob_sha1"] = verified_source_sha1
+
     if payload["performance_scope"] != "DEVELOPMENT_ONLY":
         raise SystemExit("Stage-7 performance scope changed unexpectedly.")
     if payload["historical_test_metrics_read"] is not False:
