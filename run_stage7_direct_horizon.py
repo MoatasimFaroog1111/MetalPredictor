@@ -4,7 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
-from metal_predictor.direct_horizon.integrity import GitBlobIntegrityVerifier
+from metal_predictor.direct_horizon.dataset import Stage7DatasetBuilder
+from metal_predictor.direct_horizon.integrity import VerifiedSourceSnapshot
 from metal_predictor.direct_horizon.preregistration import (
     STAGE7_SOURCE_GIT_BLOB_SHA1,
     STAGE7_SOURCE_PATH,
@@ -29,17 +30,26 @@ def main() -> None:
     if locked != expected:
         raise SystemExit("Stage-7 preregistration lock no longer matches the code payload.")
 
-    # This verification lives inside the executable research boundary rather than
-    # relying only on CI. Local/manual runs therefore fail closed on modified data.
-    verified_source_sha1 = GitBlobIntegrityVerifier(
-        expected_sha1=STAGE7_SOURCE_GIT_BLOB_SHA1
-    ).verify(repo_root / STAGE7_SOURCE_PATH)
-
-    payload = Stage7DevelopmentRunner(repo_root=repo_root).run_all()
+    # Read and verify the canonical source exactly once. Every horizon is built
+    # from this immutable in-memory snapshot, so a later filesystem mutation
+    # cannot change the bytes actually consumed during this research run.
+    source_snapshot = VerifiedSourceSnapshot.capture(
+        repo_root / STAGE7_SOURCE_PATH,
+        expected_sha1=STAGE7_SOURCE_GIT_BLOB_SHA1,
+    )
+    dataset_builder = Stage7DatasetBuilder(
+        repo_root=repo_root,
+        source_snapshot=source_snapshot,
+    )
+    payload = Stage7DevelopmentRunner(
+        repo_root=repo_root,
+        dataset_builder=dataset_builder,
+    ).run_all()
     source = payload.get("source")
     if not isinstance(source, dict):
         raise SystemExit("Stage-7 source audit payload is malformed.")
-    source["verified_git_blob_sha1"] = verified_source_sha1
+    source["verified_git_blob_sha1"] = source_snapshot.git_blob_sha1
+    source["source_consumption_mode"] = "ONE_IMMUTABLE_VERIFIED_BYTE_SNAPSHOT"
 
     if payload["performance_scope"] != "DEVELOPMENT_ONLY":
         raise SystemExit("Stage-7 performance scope changed unexpectedly.")
