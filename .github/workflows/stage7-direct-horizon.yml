@@ -68,6 +68,7 @@ jobs:
           assert report['candidate_artifacts_written'] is False
           assert report['production_forecast_routes_mutated'] is False
           assert report['source']['verified_git_blob_sha1'] == '9b95fcc5aa2679208c6b5c44c830ce6b1eaa5829'
+          assert report['source']['source_consumption_mode'] == 'ONE_IMMUTABLE_VERIFIED_BYTE_SNAPSHOT'
           assert report['guardrails']['edge_status'] == 'NOT_PROVEN'
           assert report['guardrails']['research_only'] is True
           assert report['guardrails']['buy_sell_enabled'] is False
