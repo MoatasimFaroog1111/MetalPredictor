@@ -8,9 +8,11 @@ on:
       - "tests/test_multi_horizon_stage1.py"
       - "tests/test_multi_horizon_stage2.py"
       - "tests/test_multi_horizon_stage3.py"
+      - "tests/test_multi_horizon_stage6_prereg.py"
       - "build_multi_horizon_stage2.py"
       - "run_multi_horizon_stage3.py"
       - "MULTI_HORIZON_RESEARCH.md"
+      - "MULTI_HORIZON_STAGE6.md"
       - ".github/workflows/multi-horizon-research.yml"
   push:
     branches: ["research/bullionvault-multi-horizon-stage3"]
@@ -20,9 +22,11 @@ on:
       - "tests/test_multi_horizon_stage1.py"
       - "tests/test_multi_horizon_stage2.py"
       - "tests/test_multi_horizon_stage3.py"
+      - "tests/test_multi_horizon_stage6_prereg.py"
       - "build_multi_horizon_stage2.py"
       - "run_multi_horizon_stage3.py"
       - "MULTI_HORIZON_RESEARCH.md"
+      - "MULTI_HORIZON_STAGE6.md"
       - ".github/workflows/multi-horizon-research.yml"
 
 permissions:
@@ -47,7 +51,7 @@ jobs:
       - name: Compile
         run: python -m compileall -q src/metal_predictor/multi_horizon run_multi_horizon_stage3.py
       - name: Test isolated research module
-        run: python -m pytest tests/test_multi_horizon_stage1.py tests/test_multi_horizon_stage2.py tests/test_multi_horizon_stage3.py
+        run: python -m pytest tests/test_multi_horizon_stage1.py tests/test_multi_horizon_stage2.py tests/test_multi_horizon_stage3.py tests/test_multi_horizon_stage6_prereg.py
       - name: Run development-only comparison
         run: python run_multi_horizon_stage3.py
       - name: Verify reserved test remains sealed
