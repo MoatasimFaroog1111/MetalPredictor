@@ -14,6 +14,7 @@ from metal_predictor.direct_horizon.dataset import (
 from metal_predictor.direct_horizon.integrity import (
     GitBlobIntegrityVerifier,
     SourceIntegrityError,
+    VerifiedSourceSnapshot,
     git_blob_sha1,
 )
 from metal_predictor.direct_horizon.models import Stage7ModelFactory
@@ -61,6 +62,25 @@ def test_stage7_source_verifier_fails_closed_after_byte_change(tmp_path: Path) -
     source.write_bytes(b"stage7-canonical-bytes-modified")
     with pytest.raises(SourceIntegrityError, match="source integrity failure"):
         verifier.verify(source)
+
+
+def test_stage7_builder_with_verified_snapshot_never_reopens_source_path() -> None:
+    snapshot = VerifiedSourceSnapshot.capture(
+        Path(STAGE7_SOURCE_PATH),
+        expected_sha1=STAGE7_SOURCE_GIT_BLOB_SHA1,
+    )
+
+    class PathReadForbiddenLoader:
+        def load(self, path: Path) -> pd.DataFrame:
+            raise AssertionError(f"verified Stage-7 snapshot unexpectedly reopened {path}")
+
+    dataset = Stage7DatasetBuilder(
+        loader=PathReadForbiddenLoader(),
+        source_snapshot=snapshot,
+    ).build(Stage7HorizonSpec("4h", 4))
+    assert not dataset.frame.empty
+    assert len(dataset.feature_names) == 52
+    assert snapshot.git_blob_sha1 == STAGE7_SOURCE_GIT_BLOB_SHA1
 
 
 def test_stage7_target_requires_exact_future_clock() -> None:
