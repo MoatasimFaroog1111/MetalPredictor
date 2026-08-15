@@ -1,0 +1,80 @@
+name: BullionVault Multi-Horizon Stage 6
+
+on:
+  pull_request:
+    paths:
+      - "src/metal_predictor/multi_horizon/stage6_*.py"
+      - "research_data/bullionvault_horizons/stage6_preregistration.json"
+      - "tests/test_multi_horizon_stage6*.py"
+      - "run_multi_horizon_stage6.py"
+      - "MULTI_HORIZON_STAGE6.md"
+      - ".github/workflows/multi-horizon-stage6.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  development:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-modeling.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-modeling.txt
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Compile Stage 6
+        run: |
+          python -m compileall -q \
+            src/metal_predictor/multi_horizon/stage6_preregistration.py \
+            src/metal_predictor/multi_horizon/stage6_models.py \
+            src/metal_predictor/multi_horizon/stage6_selection.py \
+            src/metal_predictor/multi_horizon/stage6_development.py \
+            run_multi_horizon_stage6.py
+      - name: Verify preregistration lock and Stage 6 tests
+        run: |
+          python -m pytest \
+            tests/test_multi_horizon_stage6_prereg.py \
+            tests/test_multi_horizon_stage6.py
+      - name: Run Stage 6 development-only comparison
+        run: python run_multi_horizon_stage6.py
+      - name: Verify historical-test and production firewalls
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(
+              Path('artifacts/multi_horizon_stage6/development_report.json').read_text()
+          )
+          assert payload['performance_scope'] == 'DEVELOPMENT_ONLY'
+          assert payload['historical_test_metrics_read'] is False
+          assert payload['historical_test_predictions_computed'] is False
+          assert payload['future_holdout_read'] is False
+          assert payload['forward_bars_used_for_fit'] is False
+          assert payload['microstructure_used_for_fit'] is False
+          assert payload['horizons']['1d']['state'] == 'DATA_PENDING'
+          assert payload['guardrails']['live_model_mutated'] is False
+          assert payload['guardrails']['frozen_52_feature_graph_mutated'] is False
+          assert payload['guardrails']['shadow62_mutated'] is False
+          assert payload['guardrails']['automatic_live_promotion'] is False
+          for key in ('4h', '12h', '2d', '30d'):
+              test = payload['horizons'][key]['historical_test']
+              assert test['metrics_read'] is False
+              assert test['predictions_computed'] is False
+              assert test['used_for_fit'] is False
+              assert test['used_for_selection'] is False
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bullionvault-multi-horizon-stage6-development-report
+          path: artifacts/multi_horizon_stage6/development_report.json
+          if-no-files-found: error
