@@ -15,6 +15,8 @@ on:
       - "tests/test_live_time_audit.py"
       - "tests/test_spread_profit.py"
       - "tests/test_bullionvault_quotes.py"
+      - "tests/test_bullionvault_platinum.py"
+      - "tests/test_bullionvault_login_smoke.py"
       - "tests/test_bullionvault_api_hardening.py"
       - "tests/test_microstructure_research.py"
       - "tests/test_forward_bar_*.py"
@@ -27,6 +29,7 @@ on:
       - ".env.live.example"
       - ".gitignore"
       - "LIVE_PLATFORM.md"
+      - "BULLIONVAULT_LOGIN_SMOKE.md"
       - "RAILWAY_DEPLOYMENT.md"
       - "BULLIONVAULT_FORWARD_BARS_STAGE4.md"
       - ".github/workflows/live-platform.yml"
@@ -46,6 +49,8 @@ on:
       - "tests/test_live_time_audit.py"
       - "tests/test_spread_profit.py"
       - "tests/test_bullionvault_quotes.py"
+      - "tests/test_bullionvault_platinum.py"
+      - "tests/test_bullionvault_login_smoke.py"
       - "tests/test_bullionvault_api_hardening.py"
       - "tests/test_microstructure_research.py"
       - "tests/test_forward_bar_*.py"
@@ -58,6 +63,7 @@ on:
       - ".env.live.example"
       - ".gitignore"
       - "LIVE_PLATFORM.md"
+      - "BULLIONVAULT_LOGIN_SMOKE.md"
       - "RAILWAY_DEPLOYMENT.md"
       - "BULLIONVAULT_FORWARD_BARS_STAGE4.md"
       - ".github/workflows/live-platform.yml"
@@ -89,7 +95,7 @@ jobs:
       - name: Compile live package
         run: python -m compileall -q src/metal_predictor/live src/metal_predictor/microstructure src/metal_predictor/forward_bars src/metal_predictor/shadow62 run_live.py docker_entrypoint_live.py
       - name: Run live platform tests
-        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py tests/test_bullionvault_api_hardening.py tests/test_microstructure_research.py tests/test_forward_bar_factory.py tests/test_forward_bar_daily.py tests/test_forward_bar_stage5.py tests/test_forward_bar_stage5_gap.py tests/test_shadow62.py
+        run: python -m pytest tests/test_live_platform.py tests/test_live_market_gap.py tests/test_gold_api_live_source.py tests/test_live_time_audit.py tests/test_spread_profit.py tests/test_bullionvault_quotes.py tests/test_bullionvault_platinum.py tests/test_bullionvault_login_smoke.py tests/test_bullionvault_api_hardening.py tests/test_microstructure_research.py tests/test_forward_bar_factory.py tests/test_forward_bar_daily.py tests/test_forward_bar_stage5.py tests/test_forward_bar_stage5_gap.py tests/test_shadow62.py
 
   docker:
     runs-on: ubuntu-24.04

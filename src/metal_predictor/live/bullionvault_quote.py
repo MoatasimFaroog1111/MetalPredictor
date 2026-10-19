@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from http.cookies import CookieError, SimpleCookie
 import math
 from typing import Any
 import xml.etree.ElementTree as ET
@@ -14,7 +15,7 @@ from metal_predictor.live.quote_contracts import (
 
 
 class BullionVaultQuoteProvider:
-    """Read-only BullionVault Silver market-depth adapter.
+    """Read-only BullionVault Silver and Platinum market-depth adapter.
 
     This adapter deliberately implements only BullionVault's view-market API. It has no
     place-order, cancel-order, balance, or account mutation methods. Authenticated access
@@ -28,6 +29,7 @@ class BullionVaultQuoteProvider:
     _LOGIN_PATH = "/secure/login.do"
     _SECURITY_CHECK_PATH = "/secure/j_security_check"
     _SILVER_SECURITIES = {"AGXLN", "AGXZU", "AGXTR", "AGXSG"}
+    _PLATINUM_SECURITIES = {"PTXLN"}
 
     def __init__(
         self,
@@ -50,7 +52,7 @@ class BullionVaultQuoteProvider:
         self._market_width = int(market_width)
         self._access_mode = access_mode.strip().lower() or "auto"
         self._allow_public_fallback = bool(allow_public_fallback)
-        self._client = client or httpx.Client(timeout=20.0, follow_redirects=True)
+        self._client = client or httpx.Client(timeout=20.0, follow_redirects=False)
         self._authenticated = False
         self._validate_configuration()
 
@@ -88,8 +90,8 @@ class BullionVaultQuoteProvider:
             raise ValueError("BullionVault username and password must be configured together.")
         if self._access_mode == "authenticated" and not self._has_credentials:
             raise ValueError("Authenticated BullionVault mode requires username and password.")
-        if self._security_id not in self._SILVER_SECURITIES:
-            raise ValueError("BullionVault Silver security must be AGXLN, AGXZU, AGXTR, or AGXSG.")
+        if self._security_id not in self._SILVER_SECURITIES | self._PLATINUM_SECURITIES:
+            raise ValueError("BullionVault security must be AGXLN, AGXZU, AGXTR, AGXSG, or PTXLN.")
         if self._currency != "USD":
             raise ValueError("MetalPredictor BullionVault quote integration currently requires USD.")
         if not math.isfinite(self._minimum_quantity_kg) or self._minimum_quantity_kg <= 0:
@@ -103,13 +105,20 @@ class BullionVaultQuoteProvider:
             response = self._client.get(
                 f"{self._BASE_URL}{self._SECURE_MARKET_PATH}",
                 params=self._market_params(),
+                follow_redirects=False,
             )
+            self._validate_response_target(response, self._SECURE_MARKET_PATH)
             response.raise_for_status()
-            return self._parse_market_response(
+            self._validate_session_cookie(response)
+            quote = self._parse_market_response(
                 response.text,
                 access_mode="AUTHENTICATED_READ_ONLY",
                 freshness_status="CURRENT_GUI_SOURCE",
             )
+            # Login HTTP 200/302 alone is not authentication evidence. A valid
+            # session-bearing response from the documented secure API is required.
+            self._authenticated = True
+            return quote
         except httpx.HTTPStatusError as exc:
             self._authenticated = False
             raise RuntimeError(
@@ -118,13 +127,18 @@ class BullionVaultQuoteProvider:
         except httpx.HTTPError:
             self._authenticated = False
             raise RuntimeError("BullionVault authenticated market transport failed.") from None
+        except RuntimeError:
+            self._authenticated = False
+            raise
 
     def _fetch_public(self, *, fallback: bool) -> BidAskMarketQuote:
         try:
             response = self._client.get(
                 f"{self._BASE_URL}{self._PUBLIC_MARKET_PATH}",
                 params=self._market_params(),
+                follow_redirects=False,
             )
+            self._validate_response_target(response, self._PUBLIC_MARKET_PATH)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise RuntimeError(
@@ -145,20 +159,72 @@ class BullionVaultQuoteProvider:
         if not self._has_credentials:
             raise RuntimeError("BullionVault authenticated quote access is not configured.")
         try:
-            login_page = self._client.get(f"{self._BASE_URL}{self._LOGIN_PATH}")
+            login_page = self._client.get(
+                f"{self._BASE_URL}{self._LOGIN_PATH}", follow_redirects=False
+            )
+            self._validate_response_target(login_page, self._LOGIN_PATH)
             login_page.raise_for_status()
             response = self._client.post(
                 f"{self._BASE_URL}{self._SECURITY_CHECK_PATH}",
                 data={"j_username": self._username, "j_password": self._password},
+                follow_redirects=False,
             )
-            response.raise_for_status()
+            self._validate_response_target(response, self._SECURITY_CHECK_PATH)
+            if response.status_code in {302, 303}:
+                self._validate_login_redirect(response)
+            else:
+                response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise RuntimeError(
                 f"BullionVault login failed with HTTP {exc.response.status_code}."
             ) from None
         except httpx.HTTPError:
             raise RuntimeError("BullionVault login transport failed.") from None
-        self._authenticated = True
+
+    def _validate_response_target(self, response: httpx.Response, expected_path: str) -> None:
+        """Reject responses redirected or supplied from a different API/origin."""
+        target = response.url
+        base = httpx.URL(self._BASE_URL)
+        if (
+            response.history
+            or target.scheme != "https"
+            or target.host != base.host
+            or target.port != base.port
+            or target.userinfo
+            or target.path != expected_path
+        ):
+            raise RuntimeError("BullionVault response target or redirect history is not allowed.")
+
+    @staticmethod
+    def _validate_session_cookie(response: httpx.Response) -> None:
+        """The documented secure API requires a JSESSIONID-bearing request."""
+        cookies = SimpleCookie()
+        try:
+            cookies.load(response.request.headers.get("cookie", ""))
+        except CookieError:
+            raise RuntimeError("BullionVault secure request has no valid session cookie.") from None
+        if "JSESSIONID" not in cookies or not cookies["JSESSIONID"].value:
+            raise RuntimeError("BullionVault secure request has no valid session cookie.")
+
+    def _validate_login_redirect(self, response: httpx.Response) -> None:
+        """Accept a safe login acknowledgement without following/replaying the POST."""
+        location = response.headers.get("location", "")
+        if not location:
+            raise RuntimeError("BullionVault login redirect is missing its destination.")
+        try:
+            target = httpx.URL(f"{self._BASE_URL}{self._SECURITY_CHECK_PATH}").join(location)
+        except (httpx.InvalidURL, ValueError):
+            raise RuntimeError("BullionVault login redirect destination is invalid.") from None
+        base = httpx.URL(self._BASE_URL)
+        if (
+            target.scheme != "https"
+            or target.host != base.host
+            or target.port != base.port
+            or target.userinfo
+            or not target.path.startswith("/secure/")
+            or target.path in {self._LOGIN_PATH, self._SECURITY_CHECK_PATH}
+        ):
+            raise RuntimeError("BullionVault login redirect destination is not allowed.")
 
     def _market_params(self) -> dict[str, object]:
         return {
@@ -193,7 +259,7 @@ class BullionVaultQuoteProvider:
                 pitch = candidate
                 break
         if pitch is None:
-            raise RuntimeError("BullionVault response did not contain the requested Silver market.")
+            raise RuntimeError("BullionVault response did not contain the requested metal market.")
 
         bids = self._parse_levels(pitch.findall("./buyPrices/price"), descending=True)
         asks = self._parse_levels(pitch.findall("./sellPrices/price"), descending=False)

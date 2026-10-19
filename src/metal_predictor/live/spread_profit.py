@@ -133,6 +133,8 @@ class SpreadProfitCalculator:
     contract; the calculator never performs network I/O itself.
     """
 
+    _SILVER_SECURITIES = frozenset({"AGXLN", "AGXZU", "AGXTR", "AGXSG"})
+
     def evaluate(
         self,
         forecast: ForecastSnapshot,
@@ -207,6 +209,14 @@ class SpreadProfitCalculator:
         execution venue's current basis while preserving the model output unchanged.
         """
 
+        # ForecastSnapshot currently represents the frozen SILVER models. Quote
+        # adapters may support other assets, but that must not authorize applying
+        # silver returns to platinum/gold. Keep this guard until forecasts carry
+        # verified instrument metadata and independently trained models exist.
+        if quote.security_id not in self._SILVER_SECURITIES:
+            raise ValueError("Silver forecasts require a supported silver market quote.")
+        if quote.currency != "USD":
+            raise ValueError("Silver forecast projection requires a USD market quote.")
         current_bid = self._positive_price(quote.best_bid_usd_per_kg, "best_bid_usd_per_kg")
         current_ask = self._positive_price(quote.best_ask_usd_per_kg, "best_ask_usd_per_kg")
         if current_ask <= current_bid:

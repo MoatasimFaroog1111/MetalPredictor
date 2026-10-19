@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import replace
+from decimal import Decimal
+import json
 import math
+import sys
 
+import httpx2 as httpx
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from metal_predictor.live.bullionvault_api import create_bullionvault_research_router
 from metal_predictor.live.bullionvault_quote import BullionVaultQuoteProvider
 from metal_predictor.live.contracts import ForecastSnapshot
 from metal_predictor.live.quote_contracts import BidAskMarketQuote, MarketDepthLevel
@@ -34,13 +42,12 @@ MARKET_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-class FakeResponse:
-    def __init__(self, text: str) -> None:
-        self.text = text
-        self.status_code = 200
-
-    def raise_for_status(self) -> None:
-        return None
+class FakeResponse(httpx.Response):
+    def __init__(self, text: str, url: str) -> None:
+        super().__init__(
+            200, text=text,
+            request=httpx.Request("GET", url, headers={"Cookie": "JSESSIONID=synthetic-session"}),
+        )
 
 
 class FakeClient:
@@ -49,15 +56,21 @@ class FakeClient:
         self.get_calls: list[tuple[str, dict[str, object] | None]] = []
         self.post_calls: list[tuple[str, dict[str, object] | None]] = []
 
-    def get(self, url: str, params: dict[str, object] | None = None) -> FakeResponse:
+    def get(
+        self, url: str, params: dict[str, object] | None = None, *, follow_redirects: bool = True
+    ) -> FakeResponse:
+        assert follow_redirects is False
         self.get_calls.append((url, params))
         if "view_market_xml.do" in url:
-            return FakeResponse(self.market_xml)
-        return FakeResponse("<html><body>login</body></html>")
+            return FakeResponse(self.market_xml, url)
+        return FakeResponse("<html><body>login</body></html>", url)
 
-    def post(self, url: str, data: dict[str, object] | None = None) -> FakeResponse:
+    def post(
+        self, url: str, data: dict[str, object] | None = None, *, follow_redirects: bool = True
+    ) -> FakeResponse:
+        assert follow_redirects is False
         self.post_calls.append((url, data))
-        return FakeResponse("<html><body>ok</body></html>")
+        return FakeResponse("<html><body>ok</body></html>", url)
 
 
 def _forecast() -> ForecastSnapshot:
@@ -174,3 +187,79 @@ def test_market_quote_projection_applies_frozen_return_to_bullionvault_mid() -> 
     assert result["safety"]["buy_sell_enabled"] is False
     assert result["safety"]["execution_enabled"] is False
     assert result["safety"]["order_submission_available"] is False
+
+
+def _projection_quote(security_id="AGXLN", currency="USD"):
+    return BidAskMarketQuote(
+        source_provider="BullionVault", security_id=security_id, currency=currency,
+        best_bid_usd_per_kg=2120, best_ask_usd_per_kg=2122,
+        best_bid_quantity_kg=1, best_ask_quantity_kg=1,
+        bid_depth=(MarketDepthLevel(2120, 1),),
+        ask_depth=(MarketDepthLevel(2122, 1),),
+        fetched_at_utc=datetime.now(timezone.utc),
+        access_mode="PUBLIC_CACHED_READ_ONLY",
+        freshness_status="SERVER_CACHED_LESS_CURRENT",
+    )
+
+
+@pytest.mark.parametrize("security_id", ["AGXLN", "AGXZU", "AGXTR", "AGXSG"])
+def test_silver_forecast_accepts_each_supported_silver_market(security_id):
+    result = SpreadProfitCalculator().evaluate_market_quote(
+        _forecast(), _projection_quote(security_id), MarketQuoteProfitAssumptions()
+    )
+    assert result["market_quote"]["security_id"] == security_id
+
+
+@pytest.mark.parametrize("security_id", ["PTXLN", "AUXLN", "UNKNOWN", "agxln", ""])
+def test_silver_forecast_rejects_other_or_ambiguous_assets(security_id):
+    with pytest.raises(ValueError, match="supported silver market"):
+        SpreadProfitCalculator().evaluate_market_quote(
+            _forecast(), _projection_quote(security_id), MarketQuoteProfitAssumptions()
+        )
+
+
+def test_silver_forecast_rejects_wrong_quote_currency():
+    with pytest.raises(ValueError, match="USD market"):
+        SpreadProfitCalculator().evaluate_market_quote(
+            _forecast(), _projection_quote(currency="EUR"), MarketQuoteProfitAssumptions()
+        )
+
+
+def test_api_allows_read_only_platinum_quote_but_rejects_silver_projection():
+    class SavedPlatinumProvider:
+        def fetch_quote(self):
+            return _projection_quote("PTXLN")
+
+    app = FastAPI()
+    app.include_router(create_bullionvault_research_router(_forecast, SavedPlatinumProvider()))
+    with TestClient(app) as client:
+        quote_response = client.get("/api/v1/research/bullionvault/quote")
+        projection_response = client.post(
+            "/api/v1/research/bullionvault/spread-profit/latest", json={}
+        )
+    assert quote_response.status_code == 200
+    assert quote_response.json()["quote"]["security_id"] == "PTXLN"
+    assert quote_response.json()["safety"]["order_submission_available"] is False
+    assert projection_response.status_code == 422
+    assert "supported silver market" in projection_response.json()["detail"]
+
+
+@pytest.mark.parametrize("bid, ask", [
+    (1.6e308, 1.7e308),
+    (sys.float_info.max / 2, sys.float_info.max),
+    (sys.float_info.max * 0.99, sys.float_info.max),
+    (1e-308, 2e-308),
+    (2120.0, 2122.0),
+])
+def test_finite_ordered_prices_have_finite_serializable_midpoint(bid, ask):
+    quote = replace(
+        _projection_quote("PTXLN"),
+        best_bid_usd_per_kg=bid, best_ask_usd_per_kg=ask,
+        bid_depth=(MarketDepthLevel(bid, 1),), ask_depth=(MarketDepthLevel(ask, 1),),
+    )
+    expected = float((Decimal(str(bid)) + Decimal(str(ask))) / 2)
+    assert math.isfinite(quote.mid_usd_per_kg)
+    assert bid <= quote.mid_usd_per_kg <= ask
+    assert quote.mid_usd_per_kg == pytest.approx(expected, rel=1e-14, abs=0)
+    assert math.isfinite(quote.spread_usd_per_kg)
+    json.dumps(quote.as_dict(), allow_nan=False)
