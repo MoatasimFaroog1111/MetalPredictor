@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import replace
+from decimal import Decimal
+import json
 import math
+import sys
 
 import httpx2 as httpx
 import pytest
@@ -238,3 +242,24 @@ def test_api_allows_read_only_platinum_quote_but_rejects_silver_projection():
     assert quote_response.json()["safety"]["order_submission_available"] is False
     assert projection_response.status_code == 422
     assert "supported silver market" in projection_response.json()["detail"]
+
+
+@pytest.mark.parametrize("bid, ask", [
+    (1.6e308, 1.7e308),
+    (sys.float_info.max / 2, sys.float_info.max),
+    (sys.float_info.max * 0.99, sys.float_info.max),
+    (1e-308, 2e-308),
+    (2120.0, 2122.0),
+])
+def test_finite_ordered_prices_have_finite_serializable_midpoint(bid, ask):
+    quote = replace(
+        _projection_quote("PTXLN"),
+        best_bid_usd_per_kg=bid, best_ask_usd_per_kg=ask,
+        bid_depth=(MarketDepthLevel(bid, 1),), ask_depth=(MarketDepthLevel(ask, 1),),
+    )
+    expected = float((Decimal(str(bid)) + Decimal(str(ask))) / 2)
+    assert math.isfinite(quote.mid_usd_per_kg)
+    assert bid <= quote.mid_usd_per_kg <= ask
+    assert quote.mid_usd_per_kg == pytest.approx(expected, rel=1e-14, abs=0)
+    assert math.isfinite(quote.spread_usd_per_kg)
+    json.dumps(quote.as_dict(), allow_nan=False)

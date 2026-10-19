@@ -5,6 +5,8 @@ remains silver-only, and no tests reconfigure the silver application for platinu
 """
 from datetime import datetime, timedelta, timezone
 import socket
+import json
+import math
 from urllib.parse import parse_qs
 
 import httpx2 as httpx
@@ -221,6 +223,17 @@ def test_depth_sorted_with_quantities_attached(make_provider):
     assert [(x.price_usd_per_kg, x.quantity_kg) for x in quote.ask_depth] == [
         (50100, 0.2), (50200, 0.4),
     ]
+
+
+def test_large_finite_xml_prices_remain_finite_after_midpoint_calculation(make_provider):
+    provider, _ = make_provider(envelope(pitch(
+        bids='<price limit="1.6e308" quantity="1"/>',
+        asks='<price limit="1.7e308" quantity="1"/>',
+    )))
+    quote = provider.fetch_quote()
+    assert math.isfinite(quote.mid_usd_per_kg)
+    assert quote.mid_usd_per_kg == pytest.approx(1.65e308)
+    json.dumps(quote.as_dict(), allow_nan=False)
 
 
 @pytest.mark.parametrize("side", ["bids", "asks"])

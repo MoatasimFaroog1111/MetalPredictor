@@ -53,10 +53,16 @@ class BidAskMarketQuote:
                 raise ValueError(f"{name} must be finite and positive.")
         if self.best_ask_usd_per_kg <= self.best_bid_usd_per_kg:
             raise ValueError("Market quote must have ask above bid.")
+        if not math.isfinite(self.mid_usd_per_kg):
+            raise ValueError("Market quote midpoint must be finite.")
 
     @property
     def mid_usd_per_kg(self) -> float:
-        return (self.best_bid_usd_per_kg + self.best_ask_usd_per_kg) / 2.0
+        # Prices are finite, positive and ordered. Subtracting first keeps a
+        # perfectly valid large quote from overflowing while adding bid + ask.
+        return self.best_bid_usd_per_kg + (
+            self.best_ask_usd_per_kg - self.best_bid_usd_per_kg
+        ) / 2.0
 
     @property
     def spread_usd_per_kg(self) -> float:
