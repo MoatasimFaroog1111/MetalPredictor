@@ -14,7 +14,7 @@ from metal_predictor.live.quote_contracts import (
 
 
 class BullionVaultQuoteProvider:
-    """Read-only BullionVault Silver market-depth adapter.
+    """Read-only BullionVault Silver and Platinum market-depth adapter.
 
     This adapter deliberately implements only BullionVault's view-market API. It has no
     place-order, cancel-order, balance, or account mutation methods. Authenticated access
@@ -28,6 +28,7 @@ class BullionVaultQuoteProvider:
     _LOGIN_PATH = "/secure/login.do"
     _SECURITY_CHECK_PATH = "/secure/j_security_check"
     _SILVER_SECURITIES = {"AGXLN", "AGXZU", "AGXTR", "AGXSG"}
+    _PLATINUM_SECURITIES = {"PTXLN"}
 
     def __init__(
         self,
@@ -88,8 +89,8 @@ class BullionVaultQuoteProvider:
             raise ValueError("BullionVault username and password must be configured together.")
         if self._access_mode == "authenticated" and not self._has_credentials:
             raise ValueError("Authenticated BullionVault mode requires username and password.")
-        if self._security_id not in self._SILVER_SECURITIES:
-            raise ValueError("BullionVault Silver security must be AGXLN, AGXZU, AGXTR, or AGXSG.")
+        if self._security_id not in self._SILVER_SECURITIES | self._PLATINUM_SECURITIES:
+            raise ValueError("BullionVault security must be AGXLN, AGXZU, AGXTR, AGXSG, or PTXLN.")
         if self._currency != "USD":
             raise ValueError("MetalPredictor BullionVault quote integration currently requires USD.")
         if not math.isfinite(self._minimum_quantity_kg) or self._minimum_quantity_kg <= 0:
@@ -193,7 +194,7 @@ class BullionVaultQuoteProvider:
                 pitch = candidate
                 break
         if pitch is None:
-            raise RuntimeError("BullionVault response did not contain the requested Silver market.")
+            raise RuntimeError("BullionVault response did not contain the requested metal market.")
 
         bids = self._parse_levels(pitch.findall("./buyPrices/price"), descending=True)
         asks = self._parse_levels(pitch.findall("./sellPrices/price"), descending=False)
