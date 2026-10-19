@@ -50,17 +50,23 @@ def no_real_network(monkeypatch):
 def make_provider():
     clients = []
 
-    def make(xml=None, handler=None, **config):
+    def make(xml=None, handler=None, session_cookie=True, **config):
         calls = []
         text = envelope(pitch()) if xml is None else xml
 
         def dispatch(request):
             calls.append(request)
             if handler is not None:
-                return handler(request)
-            assert request.method == "GET"
-            assert request.url.path == "/view_market_xml.do"
-            return httpx.Response(200, text=text)
+                response = handler(request)
+            else:
+                assert request.method == "GET"
+                assert request.url.path == "/view_market_xml.do"
+                response = httpx.Response(200, text=text)
+            if request.url.path == "/secure/login.do" and session_cookie:
+                response.headers.setdefault(
+                    "Set-Cookie", "JSESSIONID=synthetic-session; Path=/; Secure; HttpOnly"
+                )
+            return response
 
         # Deliberately unsafe client default: the adapter must override each request.
         client = httpx.Client(transport=httpx.MockTransport(dispatch), follow_redirects=True)
@@ -414,6 +420,99 @@ def test_unsafe_login_acknowledgement_rejected(make_provider, status, location):
     with pytest.raises(RuntimeError, match="login redirect"):
         provider.fetch_quote()
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("mode, allowed", [
+    ("authenticated", False), ("auto", True),
+])
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+@pytest.mark.parametrize("location", [
+    "/view_market_xml.do", "/secure/login.do",
+    "https://redirect-sink.invalid/view_market_xml.do",
+])
+def test_secure_market_redirect_never_labelled_authenticated(
+    make_provider, mode, allowed, status, location,
+):
+    def handler(request):
+        if request.url.path == "/secure/api/v2/view_market_xml.do":
+            return httpx.Response(status, headers={"Location": location})
+        return httpx.Response(200, text=envelope(pitch()))
+
+    provider, calls = make_provider(
+        handler=handler, access_mode=mode,
+        username="synthetic-user", password="synthetic-password",
+    )
+    if allowed:
+        quote = provider.fetch_quote()
+        assert quote.access_mode == "PUBLIC_CACHED_FALLBACK"
+        assert quote.freshness_status == "SERVER_CACHED_LESS_CURRENT"
+        assert calls[-1].url.path == "/view_market_xml.do"
+    else:
+        with pytest.raises(RuntimeError):
+            provider.fetch_quote()
+        assert calls[-1].url.path == "/secure/api/v2/view_market_xml.do"
+    assert all(r.url.host == "www.bullionvault.com" for r in calls)
+
+
+@pytest.mark.parametrize("session_cookie", [True, False])
+@pytest.mark.parametrize("secure_body", [
+    "<html><body>Login failed</body></html>", "<envelope/>", "<broken>",
+])
+def test_login_http_200_not_sufficient_and_next_attempt_logs_in_again(
+    make_provider, session_cookie, secure_body,
+):
+    def handler(request):
+        if request.url.path == "/secure/api/v2/view_market_xml.do":
+            return httpx.Response(200, text=secure_body)
+        return httpx.Response(200, text="<html>Login form</html>")
+
+    provider, calls = make_provider(
+        handler=handler, session_cookie=session_cookie, access_mode="authenticated",
+        username="synthetic-user", password="synthetic-password",
+    )
+    for _ in range(2):
+        with pytest.raises(RuntimeError):
+            provider.fetch_quote()
+    assert sum(r.url.path == "/secure/j_security_check" for r in calls) == 2
+
+
+def test_secure_xml_without_session_cookie_is_rejected(make_provider):
+    provider, _ = make_provider(
+        handler=lambda r: httpx.Response(200, text=envelope(pitch())),
+        session_cookie=False, access_mode="authenticated",
+        username="synthetic-user", password="synthetic-password",
+    )
+    with pytest.raises(RuntimeError, match="session cookie"):
+        provider.fetch_quote()
+
+
+@pytest.mark.parametrize("bad_url", [
+    "https://www.bullionvault.com/view_market_xml.do",
+    "https://redirect-sink.invalid/secure/api/v2/view_market_xml.do",
+    "http://www.bullionvault.com/secure/api/v2/view_market_xml.do",
+])
+def test_injected_client_cannot_forge_secure_response_location(make_provider, bad_url):
+    base_provider, _ = make_provider(
+        handler=lambda r: httpx.Response(200, text=envelope(pitch())),
+    )
+
+    class ResponseSwappingClient:
+        def get(self, url, **kwargs):
+            response = base_provider._client.get(url, **kwargs)
+            if url.endswith("/secure/api/v2/view_market_xml.do"):
+                # Change it after httpx binds its request to the transport response.
+                response.request = httpx.Request("GET", bad_url)
+            return response
+
+        def post(self, url, **kwargs):
+            return base_provider._client.post(url, **kwargs)
+
+    provider = BullionVaultQuoteProvider(
+        client=ResponseSwappingClient(), security_id="PTXLN", access_mode="authenticated",
+        username="synthetic-user", password="synthetic-password",
+    )
+    with pytest.raises(RuntimeError, match="response target"):
+        provider.fetch_quote()
 
 
 @pytest.mark.parametrize("age_seconds, error", [

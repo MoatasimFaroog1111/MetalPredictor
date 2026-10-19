@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import math
 
+import httpx2 as httpx
 import pytest
 
 from metal_predictor.live.bullionvault_quote import BullionVaultQuoteProvider
@@ -34,13 +35,12 @@ MARKET_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-class FakeResponse:
-    def __init__(self, text: str) -> None:
-        self.text = text
-        self.status_code = 200
-
-    def raise_for_status(self) -> None:
-        return None
+class FakeResponse(httpx.Response):
+    def __init__(self, text: str, url: str) -> None:
+        super().__init__(
+            200, text=text,
+            request=httpx.Request("GET", url, headers={"Cookie": "JSESSIONID=synthetic-session"}),
+        )
 
 
 class FakeClient:
@@ -55,15 +55,15 @@ class FakeClient:
         assert follow_redirects is False
         self.get_calls.append((url, params))
         if "view_market_xml.do" in url:
-            return FakeResponse(self.market_xml)
-        return FakeResponse("<html><body>login</body></html>")
+            return FakeResponse(self.market_xml, url)
+        return FakeResponse("<html><body>login</body></html>", url)
 
     def post(
         self, url: str, data: dict[str, object] | None = None, *, follow_redirects: bool = True
     ) -> FakeResponse:
         assert follow_redirects is False
         self.post_calls.append((url, data))
-        return FakeResponse("<html><body>ok</body></html>")
+        return FakeResponse("<html><body>ok</body></html>", url)
 
 
 def _forecast() -> ForecastSnapshot:

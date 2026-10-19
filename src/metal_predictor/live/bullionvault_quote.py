@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from http.cookies import CookieError, SimpleCookie
 import math
 from typing import Any
 import xml.etree.ElementTree as ET
@@ -106,12 +107,18 @@ class BullionVaultQuoteProvider:
                 params=self._market_params(),
                 follow_redirects=False,
             )
+            self._validate_response_target(response, self._SECURE_MARKET_PATH)
             response.raise_for_status()
-            return self._parse_market_response(
+            self._validate_session_cookie(response)
+            quote = self._parse_market_response(
                 response.text,
                 access_mode="AUTHENTICATED_READ_ONLY",
                 freshness_status="CURRENT_GUI_SOURCE",
             )
+            # Login HTTP 200/302 alone is not authentication evidence. A valid
+            # session-bearing response from the documented secure API is required.
+            self._authenticated = True
+            return quote
         except httpx.HTTPStatusError as exc:
             self._authenticated = False
             raise RuntimeError(
@@ -120,6 +127,9 @@ class BullionVaultQuoteProvider:
         except httpx.HTTPError:
             self._authenticated = False
             raise RuntimeError("BullionVault authenticated market transport failed.") from None
+        except RuntimeError:
+            self._authenticated = False
+            raise
 
     def _fetch_public(self, *, fallback: bool) -> BidAskMarketQuote:
         try:
@@ -128,6 +138,7 @@ class BullionVaultQuoteProvider:
                 params=self._market_params(),
                 follow_redirects=False,
             )
+            self._validate_response_target(response, self._PUBLIC_MARKET_PATH)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise RuntimeError(
@@ -151,12 +162,14 @@ class BullionVaultQuoteProvider:
             login_page = self._client.get(
                 f"{self._BASE_URL}{self._LOGIN_PATH}", follow_redirects=False
             )
+            self._validate_response_target(login_page, self._LOGIN_PATH)
             login_page.raise_for_status()
             response = self._client.post(
                 f"{self._BASE_URL}{self._SECURITY_CHECK_PATH}",
                 data={"j_username": self._username, "j_password": self._password},
                 follow_redirects=False,
             )
+            self._validate_response_target(response, self._SECURITY_CHECK_PATH)
             if response.status_code in {302, 303}:
                 self._validate_login_redirect(response)
             else:
@@ -167,7 +180,31 @@ class BullionVaultQuoteProvider:
             ) from None
         except httpx.HTTPError:
             raise RuntimeError("BullionVault login transport failed.") from None
-        self._authenticated = True
+
+    def _validate_response_target(self, response: httpx.Response, expected_path: str) -> None:
+        """Reject responses redirected or supplied from a different API/origin."""
+        target = response.url
+        base = httpx.URL(self._BASE_URL)
+        if (
+            response.history
+            or target.scheme != "https"
+            or target.host != base.host
+            or target.port != base.port
+            or target.userinfo
+            or target.path != expected_path
+        ):
+            raise RuntimeError("BullionVault response target or redirect history is not allowed.")
+
+    @staticmethod
+    def _validate_session_cookie(response: httpx.Response) -> None:
+        """The documented secure API requires a JSESSIONID-bearing request."""
+        cookies = SimpleCookie()
+        try:
+            cookies.load(response.request.headers.get("cookie", ""))
+        except CookieError:
+            raise RuntimeError("BullionVault secure request has no valid session cookie.") from None
+        if "JSESSIONID" not in cookies or not cookies["JSESSIONID"].value:
+            raise RuntimeError("BullionVault secure request has no valid session cookie.")
 
     def _validate_login_redirect(self, response: httpx.Response) -> None:
         """Accept a safe login acknowledgement without following/replaying the POST."""
