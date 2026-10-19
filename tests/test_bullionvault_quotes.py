@@ -5,7 +5,10 @@ import math
 
 import httpx2 as httpx
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from metal_predictor.live.bullionvault_api import create_bullionvault_research_router
 from metal_predictor.live.bullionvault_quote import BullionVaultQuoteProvider
 from metal_predictor.live.contracts import ForecastSnapshot
 from metal_predictor.live.quote_contracts import BidAskMarketQuote, MarketDepthLevel
@@ -180,3 +183,58 @@ def test_market_quote_projection_applies_frozen_return_to_bullionvault_mid() -> 
     assert result["safety"]["buy_sell_enabled"] is False
     assert result["safety"]["execution_enabled"] is False
     assert result["safety"]["order_submission_available"] is False
+
+
+def _projection_quote(security_id="AGXLN", currency="USD"):
+    return BidAskMarketQuote(
+        source_provider="BullionVault", security_id=security_id, currency=currency,
+        best_bid_usd_per_kg=2120, best_ask_usd_per_kg=2122,
+        best_bid_quantity_kg=1, best_ask_quantity_kg=1,
+        bid_depth=(MarketDepthLevel(2120, 1),),
+        ask_depth=(MarketDepthLevel(2122, 1),),
+        fetched_at_utc=datetime.now(timezone.utc),
+        access_mode="PUBLIC_CACHED_READ_ONLY",
+        freshness_status="SERVER_CACHED_LESS_CURRENT",
+    )
+
+
+@pytest.mark.parametrize("security_id", ["AGXLN", "AGXZU", "AGXTR", "AGXSG"])
+def test_silver_forecast_accepts_each_supported_silver_market(security_id):
+    result = SpreadProfitCalculator().evaluate_market_quote(
+        _forecast(), _projection_quote(security_id), MarketQuoteProfitAssumptions()
+    )
+    assert result["market_quote"]["security_id"] == security_id
+
+
+@pytest.mark.parametrize("security_id", ["PTXLN", "AUXLN", "UNKNOWN", "agxln", ""])
+def test_silver_forecast_rejects_other_or_ambiguous_assets(security_id):
+    with pytest.raises(ValueError, match="supported silver market"):
+        SpreadProfitCalculator().evaluate_market_quote(
+            _forecast(), _projection_quote(security_id), MarketQuoteProfitAssumptions()
+        )
+
+
+def test_silver_forecast_rejects_wrong_quote_currency():
+    with pytest.raises(ValueError, match="USD market"):
+        SpreadProfitCalculator().evaluate_market_quote(
+            _forecast(), _projection_quote(currency="EUR"), MarketQuoteProfitAssumptions()
+        )
+
+
+def test_api_allows_read_only_platinum_quote_but_rejects_silver_projection():
+    class SavedPlatinumProvider:
+        def fetch_quote(self):
+            return _projection_quote("PTXLN")
+
+    app = FastAPI()
+    app.include_router(create_bullionvault_research_router(_forecast, SavedPlatinumProvider()))
+    with TestClient(app) as client:
+        quote_response = client.get("/api/v1/research/bullionvault/quote")
+        projection_response = client.post(
+            "/api/v1/research/bullionvault/spread-profit/latest", json={}
+        )
+    assert quote_response.status_code == 200
+    assert quote_response.json()["quote"]["security_id"] == "PTXLN"
+    assert quote_response.json()["safety"]["order_submission_available"] is False
+    assert projection_response.status_code == 422
+    assert "supported silver market" in projection_response.json()["detail"]
