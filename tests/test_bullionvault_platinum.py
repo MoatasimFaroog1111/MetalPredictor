@@ -62,7 +62,8 @@ def make_provider():
             assert request.url.path == "/view_market_xml.do"
             return httpx.Response(200, text=text)
 
-        client = httpx.Client(transport=httpx.MockTransport(dispatch))
+        # Deliberately unsafe client default: the adapter must override each request.
+        client = httpx.Client(transport=httpx.MockTransport(dispatch), follow_redirects=True)
         clients.append(client)
         kwargs = {"security_id": "PTXLN", "access_mode": "public"}
         kwargs.update(config)
@@ -346,6 +347,73 @@ def test_authenticated_market_failure_requires_new_login(make_provider):
         provider.fetch_quote()
     assert provider.fetch_quote().access_mode == "AUTHENTICATED_READ_ONLY"
     assert sum(r.url.path == "/secure/j_security_check" for r in calls) == 2
+
+
+@pytest.mark.parametrize("status", [307, 308])
+@pytest.mark.parametrize("location", [
+    "https://redirect-sink.invalid/login",
+    "http://www.bullionvault.com/secure/home.do",
+    "/secure/home.do",
+])
+def test_login_never_replays_credential_post(make_provider, status, location):
+    def handler(request):
+        if request.url.path == "/secure/j_security_check":
+            return httpx.Response(status, headers={"Location": location})
+        return httpx.Response(200, text=envelope(pitch()))
+
+    provider, calls = make_provider(
+        handler=handler, access_mode="authenticated",
+        username="synthetic-user", password="synthetic-password",
+    )
+    with pytest.raises(RuntimeError):
+        provider.fetch_quote()
+    assert len(calls) == 2
+    assert all(r.url.host == "www.bullionvault.com" for r in calls)
+    assert sum(r.method == "POST" for r in calls) == 1
+
+
+@pytest.mark.parametrize("status", [302, 303])
+@pytest.mark.parametrize("location", [
+    "/secure/home.do", "https://www.bullionvault.com/secure/home.do",
+])
+def test_safe_login_redirect_not_followed_before_secure_read(make_provider, status, location):
+    def handler(request):
+        if request.url.path == "/secure/j_security_check":
+            return httpx.Response(status, headers={"Location": location})
+        return httpx.Response(200, text=envelope(pitch()))
+
+    provider, calls = make_provider(
+        handler=handler, access_mode="authenticated",
+        username="synthetic-user", password="synthetic-password",
+    )
+    assert provider.fetch_quote().security_id == "PTXLN"
+    assert len(calls) == 3
+    assert all(r.url.path != "/secure/home.do" for r in calls)
+
+
+@pytest.mark.parametrize("status", [302, 303])
+@pytest.mark.parametrize("location", [
+    "", "https://redirect-sink.invalid/secure/home.do",
+    "//redirect-sink.invalid/secure/home.do",
+    "http://www.bullionvault.com/secure/home.do",
+    "https://www.bullionvault.com:444/secure/home.do",
+    "https://synthetic:password@www.bullionvault.com/secure/home.do",
+    "/view_market_xml.do", "/secure/login.do", "/secure/j_security_check",
+    "https://www.bullionvault.com.redirect-sink.invalid/secure/home.do",
+])
+def test_unsafe_login_acknowledgement_rejected(make_provider, status, location):
+    def handler(request):
+        if request.url.path == "/secure/j_security_check":
+            return httpx.Response(status, headers={"Location": location})
+        return httpx.Response(200, text=envelope(pitch()))
+
+    provider, calls = make_provider(
+        handler=handler, access_mode="authenticated",
+        username="synthetic-user", password="synthetic-password",
+    )
+    with pytest.raises(RuntimeError, match="login redirect"):
+        provider.fetch_quote()
+    assert len(calls) == 2
 
 
 @pytest.mark.parametrize("age_seconds, error", [

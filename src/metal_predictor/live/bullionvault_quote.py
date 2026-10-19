@@ -51,7 +51,7 @@ class BullionVaultQuoteProvider:
         self._market_width = int(market_width)
         self._access_mode = access_mode.strip().lower() or "auto"
         self._allow_public_fallback = bool(allow_public_fallback)
-        self._client = client or httpx.Client(timeout=20.0, follow_redirects=True)
+        self._client = client or httpx.Client(timeout=20.0, follow_redirects=False)
         self._authenticated = False
         self._validate_configuration()
 
@@ -104,6 +104,7 @@ class BullionVaultQuoteProvider:
             response = self._client.get(
                 f"{self._BASE_URL}{self._SECURE_MARKET_PATH}",
                 params=self._market_params(),
+                follow_redirects=False,
             )
             response.raise_for_status()
             return self._parse_market_response(
@@ -125,6 +126,7 @@ class BullionVaultQuoteProvider:
             response = self._client.get(
                 f"{self._BASE_URL}{self._PUBLIC_MARKET_PATH}",
                 params=self._market_params(),
+                follow_redirects=False,
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -146,13 +148,19 @@ class BullionVaultQuoteProvider:
         if not self._has_credentials:
             raise RuntimeError("BullionVault authenticated quote access is not configured.")
         try:
-            login_page = self._client.get(f"{self._BASE_URL}{self._LOGIN_PATH}")
+            login_page = self._client.get(
+                f"{self._BASE_URL}{self._LOGIN_PATH}", follow_redirects=False
+            )
             login_page.raise_for_status()
             response = self._client.post(
                 f"{self._BASE_URL}{self._SECURITY_CHECK_PATH}",
                 data={"j_username": self._username, "j_password": self._password},
+                follow_redirects=False,
             )
-            response.raise_for_status()
+            if response.status_code in {302, 303}:
+                self._validate_login_redirect(response)
+            else:
+                response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise RuntimeError(
                 f"BullionVault login failed with HTTP {exc.response.status_code}."
@@ -160,6 +168,26 @@ class BullionVaultQuoteProvider:
         except httpx.HTTPError:
             raise RuntimeError("BullionVault login transport failed.") from None
         self._authenticated = True
+
+    def _validate_login_redirect(self, response: httpx.Response) -> None:
+        """Accept a safe login acknowledgement without following/replaying the POST."""
+        location = response.headers.get("location", "")
+        if not location:
+            raise RuntimeError("BullionVault login redirect is missing its destination.")
+        try:
+            target = httpx.URL(f"{self._BASE_URL}{self._SECURITY_CHECK_PATH}").join(location)
+        except (httpx.InvalidURL, ValueError):
+            raise RuntimeError("BullionVault login redirect destination is invalid.") from None
+        base = httpx.URL(self._BASE_URL)
+        if (
+            target.scheme != "https"
+            or target.host != base.host
+            or target.port != base.port
+            or target.userinfo
+            or not target.path.startswith("/secure/")
+            or target.path in {self._LOGIN_PATH, self._SECURITY_CHECK_PATH}
+        ):
+            raise RuntimeError("BullionVault login redirect destination is not allowed.")
 
     def _market_params(self) -> dict[str, object]:
         return {

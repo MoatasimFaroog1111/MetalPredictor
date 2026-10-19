@@ -49,13 +49,19 @@ class FakeClient:
         self.get_calls: list[tuple[str, dict[str, object] | None]] = []
         self.post_calls: list[tuple[str, dict[str, object] | None]] = []
 
-    def get(self, url: str, params: dict[str, object] | None = None) -> FakeResponse:
+    def get(
+        self, url: str, params: dict[str, object] | None = None, *, follow_redirects: bool = True
+    ) -> FakeResponse:
+        assert follow_redirects is False
         self.get_calls.append((url, params))
         if "view_market_xml.do" in url:
             return FakeResponse(self.market_xml)
         return FakeResponse("<html><body>login</body></html>")
 
-    def post(self, url: str, data: dict[str, object] | None = None) -> FakeResponse:
+    def post(
+        self, url: str, data: dict[str, object] | None = None, *, follow_redirects: bool = True
+    ) -> FakeResponse:
+        assert follow_redirects is False
         self.post_calls.append((url, data))
         return FakeResponse("<html><body>ok</body></html>")
 
